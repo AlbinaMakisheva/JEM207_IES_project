@@ -2,6 +2,7 @@ import pandas as pd
 from src.data_cleaning import clean_pfizer_data, clean_covid_data
 from src.data_merging import merge_data
 from src.stock_returns import calculate_stock_returns
+from src.visualize_stock import visualize_stock
 
 covid_file_path = 'data/raw/covid_data.csv'
 pfizer_file_path = 'data/raw/pfizer_stock.csv'
@@ -17,4 +18,8 @@ merged_data = merge_data(covid_data, pfizer_data)
 merged_data = calculate_stock_returns(merged_data)
 
 merged_data.to_csv('data/processed/merged_data.csv', index=False)
-print(merged_data.head())
+
+# Visualization
+visualize_stock(pfizer_data)
+
+
