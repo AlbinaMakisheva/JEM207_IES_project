@@ -11,7 +11,7 @@ data = pd.read_csv(r'C:\Users\campo\OneDrive\Área de Trabalho\Erasmus - Karlova
 
 
 # Convert 'Date' to datetime format
-data['date'] = pd.to_datetime(data['date'])  # Adjusted column name based on your dataset
+data['date'] = pd.to_datetime(data['date']) 
 
 # Create a Dummy Variable for Major Events
 def create_dummy_variable(data):
@@ -22,7 +22,7 @@ def create_dummy_variable(data):
     major_event_dates = {
         "WHO Declares Pandemic": "2020-03-11",
         "First Global Vaccination": "2020-12-08",
-        "Vaccine Approval Date": "2020-12-14"
+        "Vaccination threshold reached (85%)": "2021-07-30"    #as of July 2021, almost 85% of vaccines have been administered in high- and upper-middle-income countries, and over 75% have been administered in only 10 countries alone. 
     }
 
     # Create a new column initialized to 0
