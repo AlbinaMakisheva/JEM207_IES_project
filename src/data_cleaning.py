@@ -21,3 +21,8 @@ def clean_covid_data(file_path):
     covid_data['date'] = pd.to_datetime(covid_data['date'])
     
     return covid_data
+
+def clean_merged_dummy_data(data):
+    data = data.drop_duplicates(subset=['date']).dropna(subset=['Close'])
+    
+    return data
