@@ -1,28 +1,32 @@
 import pandas as pd
 
-def clean_pfizer_data(file_path):
-    pfizer_data = pd.read_csv(file_path, header=2)
-    pfizer_data.columns = ['Date', 'Price', 'Close', 'High', 'Low', 'Volume']
+def clean_data(file_path, is_stock=False, rate_column='new_vaccinations_smoothed_per_million', threshold=0.05):
+    if is_stock:
+        data = pd.read_csv(file_path, header=2) 
+        data.columns = ['date', 'price', 'close', 'high', 'low', 'volume']
+        data['date'] = pd.to_datetime(data['date'])
+        data.set_index('date', inplace=True)
+        data['daily_return'] = data['close'].pct_change()
+    else:
+        data = pd.read_csv(file_path)
+        data.dropna(subset=['date', 'new_cases', 'new_deaths'], inplace=True)
+        data['date'] = pd.to_datetime(data['date'])
+        
+        # Apply vaccination signal
+        data = create_vaccination_signal(data, rate_column, threshold)
 
-    # Convert date and set index
-    pfizer_data['Date'] = pd.to_datetime(pfizer_data['Date'])
-    pfizer_data.set_index('Date', inplace=True)
+    # Standardize column names
+    data.columns = data.columns.str.lower()
 
-    # drop missing values
-    pfizer_data.dropna(inplace=True)  
+    return data
 
-    return pfizer_data
 
-def clean_covid_data(file_path):
-    covid_data = pd.read_csv(file_path)
-    covid_data.dropna(subset=['date', 'new_cases', 'new_deaths'], inplace=True)
-
-    # Convert date 
-    covid_data['date'] = pd.to_datetime(covid_data['date'])
+def create_vaccination_signal(data, rate_column='new_vaccinations_smoothed_per_million', threshold=0.05):
+    if rate_column not in data.columns:
+        raise KeyError(f"Column '{rate_column}' not found in the dataset.")
     
-    return covid_data
-
-def clean_merged_dummy_data(data):
-    data = data.drop_duplicates(subset=['date']).dropna(subset=['Close'])
+    # Calculate week-over-week percentage change
+    data['vaccination_signal'] = data[rate_column].pct_change(periods=7) > threshold
+    data['vaccination_signal'] = data['vaccination_signal'].astype(int)
     
     return data
