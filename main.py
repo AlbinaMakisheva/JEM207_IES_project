@@ -1,41 +1,53 @@
-import pandas as pd
-from src.data_cleaning import clean_pfizer_data, clean_covid_data, clean_merged_dummy_data
-from src.data_merging import merge_data
-from src.stock_returns import calculate_stock_returns
-from src.visualize_stock import visualize_stock
-from src.visualize_covid_data import visualize_covid_data
-from src.visualize_with_dummy import plot_stock_price
-from src.visualize_with_dummy import create_dummy_variable
-from src.visualize_cases_stocks import plot_cases_vs_stock
-from src.visualize_cases_country import plot_cases_country
-
 import os
+from src.data_cleaning import clean_data
+from src.data_merging import merge_data
+from src.analysis import compute_daily_returns, perform_regression_analysis, analyze_event_impact
+from src.visualization import plot_covid_cases, plot_stock_with_events, visualize_covid_data
+from src.data_fetching import fetch_covid_data, fetch_stock_data
 
-# Create directory if it doesn't exist
-os.makedirs('data/processed', exist_ok=True)
+COVID_FILE = 'data/raw/covid_data.csv'
+STOCK_FILE = 'data/raw/pfizer_stock.csv'
 
+def main():
+    if not os.path.exists(COVID_FILE):
+        print("Fetching COVID data...")
+        fetch_covid_data(COVID_FILE)
+        
+    if not os.path.exists(STOCK_FILE):
+        print("Fetching stock data...")
+        fetch_stock_data(STOCK_FILE)
 
-covid_file_path = 'data/raw/covid_data.csv'
-pfizer_file_path = 'data/raw/pfizer_stock.csv'
+    # Key events
+    events = {
+        "WHO Declares Pandemic": "2020-03-11",
+        "First Vaccine": "2020-12-08",
+        "Vaccination Threshold Reached (85%)": "2021-07-30",
+        "Relaxation of Lockdowns": "2022-05-01",  
+        "Omicron-Specific Vaccine Approval": "2022-09-01", 
+        "China Eases Zero-COVID Policy": "2023-01-01", 
+    }
+    
+    # Clean data
+    covid_data = clean_data(COVID_FILE)
+    stock_data = clean_data(STOCK_FILE, is_stock=True)
+    
+    # Merge datasets
+    merged_data = merge_data(covid_data, stock_data, events)
 
-merged_data_with_dummy = pd.read_csv('data/processed/merged_data_with_dummy.csv')
-merged_data_with_dummy['date'] = pd.to_datetime(merged_data_with_dummy['date'])
+    # Analyze and visualize
+    merged_data = compute_daily_returns(merged_data)
+    
+    try:
+        regression_model_cases = perform_regression_analysis(merged_data, 'new_cases', 'daily_return')
+        regression_model_vaccination = perform_regression_analysis(merged_data, 'new_vaccinations_smoothed_per_million', 'daily_return')
+        event_impact= analyze_event_impact(merged_data)
+    except KeyError as e:
+        print(f"Analysis error: {e}")
+    
 
-# Clean data
-covid_data = clean_covid_data(covid_file_path)
-pfizer_data = clean_pfizer_data(pfizer_file_path)
-merged_data_with_dummy = clean_merged_dummy_data(merged_data_with_dummy)
+    plot_stock_with_events(merged_data, events)
+    visualize_covid_data(covid_data)
+    plot_covid_cases(merged_data)
 
-# Merge data
-merged_data = merge_data(covid_data, pfizer_data)
-
-# Calculate stock returns
-merged_data = calculate_stock_returns(merged_data)
-
-# Visualizations
-#visualize_stock(pfizer_data)
-#visualize_covid_data(covid_data)
-#plot_stock_price()
-#plot_cases_vs_stock(merged_data_with_dummy)
-plot_cases_country(merged_data)
-
+if __name__ == "__main__":
+    main()
