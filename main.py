@@ -22,6 +22,9 @@ def main():
         "WHO Declares Pandemic": "2020-03-11",
         "First Vaccine": "2020-12-08",
         "Vaccination Threshold Reached (85%)": "2021-07-30",
+        "Relaxation of Lockdowns": "2022-05-01",  
+        "Omicron-Specific Vaccine Approval": "2022-09-01", 
+        "China Eases Zero-COVID Policy": "2023-01-01", 
     }
     
     # Clean data
