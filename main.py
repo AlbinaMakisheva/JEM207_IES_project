@@ -1,4 +1,6 @@
 import pandas as pd
+import os
+
 from src.data_cleaning import clean_pfizer_data, clean_covid_data, clean_merged_dummy_data
 from src.data_merging import merge_data
 from src.stock_returns import calculate_stock_returns
@@ -9,9 +11,7 @@ from src.visualize_with_dummy import create_dummy_variable
 from src.visualize_cases_stocks import plot_cases_vs_stock
 from src.visualize_cases_country import plot_cases_country
 from src.process_data import create_vaccination_signal
-
-
-import os
+from src.event_impact_analysis import compute_daily_returns, analyze_event_impact
 
 # Create directory if it doesn't exist
 os.makedirs('data/processed', exist_ok=True)
@@ -46,3 +46,11 @@ vaccination_signal_data = create_vaccination_signal(
     rate_column='new_vaccinations_smoothed_per_million'
 )
 
+merged_data_with_dummy = compute_daily_returns(merged_data_with_dummy)
+
+# Perform event impact analysis
+event_impact = analyze_event_impact(
+    data=merged_data_with_dummy,
+    event_column='Dummy_Variable',
+    return_column='daily_return'
+)
