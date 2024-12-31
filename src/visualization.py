@@ -22,13 +22,12 @@ def plot_covid_cases(data):
     )
     fig.show()
 
-
 def plot_stock_with_events(data, events, output_path='./visualizations/stock_price_with_events.png'):
     data = data.drop_duplicates(subset=['date']).dropna(subset=['close'])
     
     sns.set_theme(style="whitegrid")
     plt.figure(figsize=(14, 8))
-    
+
     # Plot the stock price
     plt.plot(data['date'], data['close'], label='Stock Price', color='blue', linewidth=2)
     
@@ -56,16 +55,16 @@ def plot_stock_with_events(data, events, output_path='./visualizations/stock_pri
     plt.savefig(output_path)
     plt.show()
 
-
 def visualize_covid_data(data, output_path='./visualizations/covid_trends.png'):
-    covid_summary = data.groupby('date')[['new_cases', 'new_deaths']].sum().reset_index()
-
+    covid_summary = data.groupby('date')[['new_cases']].sum().reset_index()
     covid_summary['new_cases_smoothed'] = covid_summary['new_cases'].rolling(7).mean()
 
     plt.figure(figsize=(14, 8))
     
+    plt.plot(covid_summary['date'], covid_summary['new_cases'], label='New Cases (Raw)', color='red', linewidth=2)
+
     # Plot smoothed cases
-    plt.plot(covid_summary['date'], covid_summary['new_cases_smoothed'], label='New Cases', color='blue', linewidth=2)
+    plt.plot(covid_summary['date'], covid_summary['new_cases_smoothed'], label='New Cases (Smoothed)', color='blue', linewidth=2)
 
     plt.title('Global COVID New Cases', fontsize=16)
     plt.xlabel('Date', fontsize=12)

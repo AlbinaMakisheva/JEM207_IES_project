@@ -7,8 +7,12 @@ def compute_daily_returns(data, price_column='close'):
     data['daily_return'] = data[price_column].pct_change()
     return data
 
+
 # Regression analysis between two variables
 def perform_regression_analysis(data, independent_var, dependent_var):
+    if independent_var not in data.columns or dependent_var not in data.columns:
+        raise KeyError(f"Columns '{independent_var}' or '{dependent_var}' not found in the dataset.")
+    
     regression_data = data[[independent_var, dependent_var]].dropna()
     X = regression_data[independent_var].values.reshape(-1, 1)
     y = regression_data[dependent_var].values
