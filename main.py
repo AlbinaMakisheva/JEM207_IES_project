@@ -33,9 +33,9 @@ merged_data = merge_data(covid_data, pfizer_data)
 merged_data = calculate_stock_returns(merged_data)
 
 # Visualizations
-# visualize_stock(pfizer_data)
-# visualize_covid_data(covid_data)
-# plot_stock_price()
-# plot_cases_vs_stock(merged_data_with_dummy)
+#visualize_stock(pfizer_data)
+#visualize_covid_data(covid_data)
+#plot_stock_price()
+#plot_cases_vs_stock(merged_data_with_dummy)
 plot_cases_country(merged_data)
 
