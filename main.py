@@ -8,6 +8,8 @@ from src.visualize_with_dummy import plot_stock_price
 from src.visualize_with_dummy import create_dummy_variable
 from src.visualize_cases_stocks import plot_cases_vs_stock
 from src.visualize_cases_country import plot_cases_country
+from src.process_data import create_vaccination_signal
+
 
 import os
 
@@ -38,4 +40,9 @@ merged_data = calculate_stock_returns(merged_data)
 # plot_stock_price()
 # plot_cases_vs_stock(merged_data_with_dummy)
 plot_cases_country(merged_data)
+
+vaccination_signal_data = create_vaccination_signal(
+    data=merged_data_with_dummy,
+    rate_column='new_vaccinations_smoothed_per_million'
+)
 
