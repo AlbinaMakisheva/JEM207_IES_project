@@ -12,6 +12,7 @@ from src.visualize_cases_stocks import plot_cases_vs_stock
 from src.visualize_cases_country import plot_cases_country
 from src.process_data import create_vaccination_signal
 from src.event_impact_analysis import compute_daily_returns, analyze_event_impact
+from src.regression_analysis import perform_regression_analysis
 
 # Create directory if it doesn't exist
 os.makedirs('data/processed', exist_ok=True)
@@ -53,4 +54,11 @@ event_impact = analyze_event_impact(
     data=merged_data_with_dummy,
     event_column='Dummy_Variable',
     return_column='daily_return'
+)
+
+# Perform regression analysis
+regression_model = perform_regression_analysis(
+    data=merged_data_with_dummy,
+    independent_var='new_vaccinations_smoothed_per_million',
+    dependent_var='daily_return'
 )
