@@ -1,8 +1,8 @@
 import os
 from src.data_cleaning import clean_data
 from src.data_merging import merge_data
-from src.analysis import compute_daily_returns, perform_regression_analysis, analyze_event_impact
-from src.visualization import plot_covid_cases, plot_stock_with_events, visualize_covid_data
+from src.analysis import compute_daily_returns, perform_multiple_linear_regression, analyze_event_impact
+from src.visualization import plot_covid_cases, plot_stock_with_events, visualize_covid_data, plot_regression_results
 from src.data_fetching import fetch_covid_data, fetch_stock_data
 
 COVID_FILE = 'data/raw/covid_data.csv'
@@ -35,19 +35,31 @@ def main():
     merged_data = merge_data(covid_data, stock_data, events)
 
     # Analyze and visualize
-    merged_data = compute_daily_returns(merged_data)
+    # merged_data = compute_daily_returns(merged_data)
     
     try:
-        regression_model_cases = perform_regression_analysis(merged_data, 'new_cases', 'daily_return')
-        regression_model_vaccination = perform_regression_analysis(merged_data, 'new_vaccinations_smoothed_per_million', 'daily_return')
+        # regression_model_cases = perform_regression_analysis(merged_data, 'new_cases', 'daily_return')
+        # regression_model_vaccination = perform_regression_analysis(merged_data, 'new_vaccinations_smoothed_per_million', 'daily_return')
+        regression_model, r2_score = perform_multiple_linear_regression(
+            merged_data,
+            dependent_var='daily_return',
+            independent_vars=['new_vaccinations_smoothed_per_million', 'new_cases', 'Dummy_Variable']
+        )
+        
+        plot_regression_results(
+            coefficients=regression_model.coef_,
+            intercept=regression_model.intercept_,
+            r2_score=r2_score,
+            feature_names=regression_model.feature_names_in_
+        )
         event_impact= analyze_event_impact(merged_data)
     except KeyError as e:
         print(f"Analysis error: {e}")
     
 
-    plot_stock_with_events(merged_data, events)
-    visualize_covid_data(covid_data)
-    plot_covid_cases(merged_data)
+    # plot_stock_with_events(merged_data, events)
+    # visualize_covid_data(covid_data)
+    # plot_covid_cases(merged_data)
 
 if __name__ == "__main__":
     main()

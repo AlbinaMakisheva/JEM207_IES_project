@@ -8,20 +8,34 @@ def compute_daily_returns(data, price_column='close'):
     return data
 
 
-# Regression analysis between two variables
-def perform_regression_analysis(data, independent_var, dependent_var):
-    if independent_var not in data.columns or dependent_var not in data.columns:
-        raise KeyError(f"Columns '{independent_var}' or '{dependent_var}' not found in the dataset.")
+def perform_multiple_linear_regression(data, dependent_var, independent_vars):
+    independent_vars = [
+        'new_vaccinations_smoothed_per_million',
+        'new_cases',
+        'Dummy_Variable',
+        'stringency_index',
+        'new_cases_per_million',
+        'total_vaccinations_per_hundred',
+        'positive_rate',
+        'gdp_per_capita',
+        'reproduction_rate'
+    ]
+    if any(var not in data.columns for var in independent_vars) or dependent_var not in data.columns:
+        raise KeyError("Missing required columns for regression.")
+    regression_data = data[[dependent_var] + independent_vars].dropna()
+    X = regression_data[independent_vars]
+    y = regression_data[dependent_var]
     
-    regression_data = data[[independent_var, dependent_var]].dropna()
-    X = regression_data[independent_var].values.reshape(-1, 1)
-    y = regression_data[dependent_var].values
-
     model = LinearRegression()
     model.fit(X, y)
+    
+    r2_score = model.score(X, y)
+    
+    print(f"Coefficients: {dict(zip(independent_vars, model.coef_))}")
+    print(f"Intercept: {model.intercept_:.4f}")
+    print(f"R^2: {r2_score:.4f}")
+    return model, r2_score
 
-    print(f"Coefficient: {model.coef_[0]:.4f}, Intercept: {model.intercept_:.4f}, R^2: {model.score(X, y):.4f}")
-    return model
 
 # Analyze the impact of events on stock returns
 def analyze_event_impact(data, event_column='Dummy_Variable', return_column='daily_return'):

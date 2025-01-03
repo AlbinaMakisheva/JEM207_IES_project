@@ -81,3 +81,18 @@ def visualize_covid_data(data, output_path='./visualizations/covid_trends.png'):
     plt.tight_layout()
     plt.savefig(output_path)
     plt.show()
+
+def plot_regression_results(coefficients, intercept, r2_score, feature_names, output_path='./visualizations/regression_results.png'):
+    if len(coefficients) != len(feature_names):
+        raise ValueError(f"Mismatch: {len(coefficients)} coefficients but {len(feature_names)} feature names provided.")
+    
+    plt.figure(figsize=(10, 6))
+    plt.bar(feature_names, coefficients, color='skyblue', edgecolor='black')
+    plt.axhline(0, color='red', linestyle='--', linewidth=1)
+    plt.title(f'Regression Coefficients (R² = {r2_score:.4f}, Intercept = {intercept:.4f})')
+    plt.ylabel('Coefficient Value')
+    plt.xlabel('Features')
+    plt.xticks(rotation=45, ha='right')
+    plt.tight_layout()
+    plt.savefig(output_path)
+    plt.show()
