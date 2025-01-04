@@ -2,24 +2,21 @@ import pandas as pd
 from sklearn.linear_model import LinearRegression
 import numpy as np
 
-# Calculates daily returns for stock prices
-def compute_daily_returns(data, price_column='close'):
-    data['daily_return'] = data[price_column].pct_change()
-    return data
+# Filter data around key events
+def filter_data_around_events(data, events, window_months=1, date_column='date'):
+    event_dates = pd.to_datetime(list(events.values()))
+    filtered_data = pd.DataFrame()
+    
+    for event_date in event_dates:
+        start_date = event_date - pd.DateOffset(months=window_months)
+        end_date = event_date + pd.DateOffset(months=window_months)
+        event_data = data[(data[date_column] >= start_date) & (data[date_column] <= end_date)]
+        filtered_data = pd.concat([filtered_data, event_data], ignore_index=True)
+    
+    return filtered_data
 
-
+# Perform regression analysis
 def perform_multiple_linear_regression(data, dependent_var, independent_vars):
-    independent_vars = [
-        'new_vaccinations_smoothed_per_million',
-        'new_cases',
-        'Dummy_Variable',
-        'stringency_index',
-        'new_cases_per_million',
-        'total_vaccinations_per_hundred',
-        'positive_rate',
-        'gdp_per_capita',
-        'reproduction_rate'
-    ]
     if any(var not in data.columns for var in independent_vars) or dependent_var not in data.columns:
         raise KeyError("Missing required columns for regression.")
     regression_data = data[[dependent_var] + independent_vars].dropna()

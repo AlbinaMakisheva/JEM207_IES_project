@@ -1,7 +1,7 @@
 import os
 from src.data_cleaning import clean_data
 from src.data_merging import merge_data
-from src.analysis import compute_daily_returns, perform_multiple_linear_regression, analyze_event_impact
+from src.analysis import filter_data_around_events, perform_multiple_linear_regression, analyze_event_impact
 from src.visualization import plot_covid_cases, plot_stock_with_events, visualize_covid_data, plot_regression_results
 from src.data_fetching import fetch_covid_data, fetch_stock_data
 
@@ -34,16 +34,24 @@ def main():
     # Merge datasets
     merged_data = merge_data(covid_data, stock_data, events)
 
-    # Analyze and visualize
-    # merged_data = compute_daily_returns(merged_data)
-    
+    # Filter data around key events
+    filtered_data = filter_data_around_events(merged_data, events)
+
     try:
-        # regression_model_cases = perform_regression_analysis(merged_data, 'new_cases', 'daily_return')
-        # regression_model_vaccination = perform_regression_analysis(merged_data, 'new_vaccinations_smoothed_per_million', 'daily_return')
         regression_model, r2_score = perform_multiple_linear_regression(
-            merged_data,
+            filtered_data,
             dependent_var='daily_return',
-            independent_vars=['new_vaccinations_smoothed_per_million', 'new_cases', 'Dummy_Variable']
+            independent_vars=[
+                'new_vaccinations_smoothed_per_million',
+                'new_cases',
+                'Dummy_Variable',
+                'stringency_index',
+                'new_cases_per_million',
+                'total_vaccinations_per_hundred',
+                'positive_rate',
+                'gdp_per_capita',
+                'reproduction_rate'
+            ]
         )
         
         plot_regression_results(
@@ -52,14 +60,13 @@ def main():
             r2_score=r2_score,
             feature_names=regression_model.feature_names_in_
         )
-        event_impact= analyze_event_impact(merged_data)
+        event_impact = analyze_event_impact(filtered_data)
     except KeyError as e:
         print(f"Analysis error: {e}")
-    
+        
 
     # plot_stock_with_events(merged_data, events)
     # visualize_covid_data(covid_data)
     # plot_covid_cases(merged_data)
-
 if __name__ == "__main__":
     main()
