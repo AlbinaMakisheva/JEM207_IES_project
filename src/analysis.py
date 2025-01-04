@@ -1,6 +1,7 @@
 import pandas as pd
 from sklearn.linear_model import LinearRegression
 from sklearn.linear_model import LogisticRegression
+from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score, classification_report
 import numpy as np
@@ -11,8 +12,8 @@ def filter_data_around_events(data, events, window_months=1, date_column='date')
     filtered_data = pd.DataFrame()
     
     for event_date in event_dates:
-        start_date = event_date - pd.DateOffset(months=window_months)
-        end_date = event_date + pd.DateOffset(months=window_months)
+        start_date = event_date - pd.DateOffset(months=1)
+        end_date = event_date + pd.DateOffset(months=2)
         event_data = data[(data[date_column] >= start_date) & (data[date_column] <= end_date)]
         filtered_data = pd.concat([filtered_data, event_data], ignore_index=True)
     
@@ -63,8 +64,8 @@ def perform_logistic_regression(data, independent_vars, target_var='price_change
     X = regression_data[independent_vars]
     y = regression_data[target_var]
     
-    # Split data into training and testing sets
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=42) # 30% of the dataset will be used for testing, and the remaining 70% will be used for training
+    # Split data into 2 sets
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=42) 
     
     # Fit logistic regression model
     model = LogisticRegression()
@@ -73,10 +74,37 @@ def perform_logistic_regression(data, independent_vars, target_var='price_change
     # Predict on the test set
     y_pred = model.predict(X_test)
 
-    # Model evaluation
     print("Model Coefficients:", model.coef_)
     print("Intercept:", model.intercept_)
     print("Accuracy on Test Data:", accuracy_score(y_test, y_pred))
     print("Classification Report:\n", classification_report(y_test, y_pred))
     
     return model
+
+
+
+# Perform Random Forest classification
+def perform_random_forest(data, independent_vars, target_var='price_change'):
+    if target_var not in data.columns or not all(var in data.columns for var in independent_vars):
+        missing = [var for var in [target_var] + independent_vars if var not in data.columns]
+        raise KeyError(f"Missing columns: {', '.join(missing)} in the dataset.")
+
+    # Prepare data for training
+    rf_data = data[independent_vars + [target_var]].dropna()
+    X = rf_data[independent_vars]
+    y = rf_data[target_var]
+    
+    # Split data into 2 sets
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=42)
+
+    # Fit Random Forest model
+    rf_model = RandomForestClassifier(n_estimators=100, random_state=42)
+    rf_model.fit(X_train, y_train)
+
+    y_pred = rf_model.predict(X_test)
+
+    print("Accuracy on Test Data:", accuracy_score(y_test, y_pred))
+    print("Classification Report:\n", classification_report(y_test, y_pred))
+    print("Feature Importance:", rf_model.feature_importances_)
+    
+    return rf_model

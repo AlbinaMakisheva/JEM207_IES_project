@@ -1,7 +1,7 @@
 import os
 from src.data_cleaning import clean_data
 from src.data_merging import merge_data
-from src.analysis import filter_data_around_events, perform_multiple_linear_regression, analyze_event_impact, prepare_binary_target, perform_logistic_regression
+from src.analysis import filter_data_around_events, perform_multiple_linear_regression, analyze_event_impact, prepare_binary_target, perform_logistic_regression, perform_random_forest
 from src.visualization import plot_covid_cases, plot_stock_with_events, visualize_covid_data, plot_regression_results
 from src.data_fetching import fetch_covid_data, fetch_stock_data
 
@@ -42,17 +42,7 @@ def main():
         regression_model, r2_score = perform_multiple_linear_regression(
             filtered_data,
             dependent_var='daily_return',
-            independent_vars=[
-                'new_vaccinations_smoothed_per_million',
-                'new_cases',
-                'Dummy_Variable',
-                'stringency_index',
-                'new_cases_per_million',
-                'total_vaccinations_per_hundred',
-                'positive_rate',
-                'gdp_per_capita',
-                'reproduction_rate'
-            ]
+            independent_vars = ['new_vaccinations_smoothed', 'new_deaths_smoothed', 'new_cases_smoothed', 'Dummy_Variable']
         )
         
         plot_regression_results(
@@ -64,9 +54,11 @@ def main():
         event_impact = analyze_event_impact(filtered_data)
 
         # Logistic regression analysis
-        merged_data = prepare_binary_target(merged_data, price_column='close')  # Prepare binary target
+        merged_data = prepare_binary_target(filtered_data, price_column='close')  # Prepare binary target
         independent_vars = ['new_vaccinations_smoothed', 'new_deaths_smoothed', 'new_cases_smoothed', 'Dummy_Variable']
         logistic_model = perform_logistic_regression(merged_data, independent_vars)
+        rf_model = perform_random_forest(merged_data, independent_vars)
+
 
     except KeyError as e:
         print(f"Analysis error: {e}")
