@@ -11,9 +11,11 @@ def filter_data_around_events(data, events, window_months=1, date_column='date')
     event_dates = pd.to_datetime(list(events.values()))
     filtered_data = pd.DataFrame()
     
+    window_months = int(window_months)
+    
     for event_date in event_dates:
-        start_date = event_date - pd.DateOffset(months=1)
-        end_date = event_date + pd.DateOffset(months=2)
+        start_date = event_date - pd.DateOffset(months=window_months)
+        end_date = event_date + pd.DateOffset(months=window_months)
         event_data = data[(data[date_column] >= start_date) & (data[date_column] <= end_date)]
         filtered_data = pd.concat([filtered_data, event_data], ignore_index=True)
     
@@ -32,11 +34,7 @@ def perform_multiple_linear_regression(data, dependent_var, independent_vars):
     
     r2_score = model.score(X, y)
     
-    print(f"Coefficients: {dict(zip(independent_vars, model.coef_))}")
-    print(f"Intercept: {model.intercept_:.4f}")
-    print(f"R^2: {r2_score:.4f}")
     return model, r2_score
-
 
 # Analyze the impact of events on stock returns
 def analyze_event_impact(data, event_column='Dummy_Variable', return_column='daily_return'):
@@ -49,10 +47,11 @@ def analyze_event_impact(data, event_column='Dummy_Variable', return_column='dai
     return event_impact
 
 
-# Prepare data for logistic regression
-def prepare_binary_target(data, price_column='close'):
-    data['price_change'] = (data[price_column].diff() > 0).astype(int)
-    return data
+def prepare_binary_target(df, price_column='close'):
+    df['price_change'] = (df[price_column].diff() > 0).astype(int)
+    df['target'] = (df[price_column].shift(-1) > df[price_column]).astype(int)
+    return df
+
 
 # Perform logistic regression
 def perform_logistic_regression(data, independent_vars, target_var='price_change'):
@@ -102,9 +101,19 @@ def perform_random_forest(data, independent_vars, target_var='price_change'):
     rf_model.fit(X_train, y_train)
 
     y_pred = rf_model.predict(X_test)
-
-    print("Accuracy on Test Data:", accuracy_score(y_test, y_pred))
-    print("Classification Report:\n", classification_report(y_test, y_pred))
-    print("Feature Importance:", rf_model.feature_importances_)
     
     return rf_model
+
+# Function to display the results in Streamlit
+def display_analysis_results(regression_model, r2_score, event_impact, rf_model):
+    st.subheader("Regression Results")
+    st.write(f"R²: {r2_score:.4f}")
+    st.write("Coefficients:")
+    st.write(dict(zip(regression_model.feature_names_in_, regression_model.coef_)))
+    st.write(f"Intercept: {regression_model.intercept_:.4f}")
+    
+    st.subheader("Event Impact Analysis")
+    st.write(event_impact)
+    
+    st.subheader("Random Forest Feature Importance")
+    st.write(rf_model.feature_importances_)

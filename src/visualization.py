@@ -2,6 +2,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import plotly.express as px
 from pathlib import Path
+import streamlit as st
 import matplotlib.dates as mdates
 import pandas as pd
 
@@ -20,7 +21,8 @@ def plot_covid_cases(data):
         title="Global COVID-19 Cases Over Time",
         color_continuous_scale=px.colors.sequential.Plasma
     )
-    fig.show()
+    st.plotly_chart(fig)
+
 
 def plot_stock_with_events(data, events, output_path='./visualizations/stock_price_with_events.png'):
     data = data.drop_duplicates(subset=['date']).dropna(subset=['close'])
@@ -53,7 +55,8 @@ def plot_stock_with_events(data, events, output_path='./visualizations/stock_pri
     Path(output_path).parent.mkdir(parents=True, exist_ok=True)
     plt.tight_layout()
     plt.savefig(output_path)
-    plt.show()
+    st.pyplot(plt)
+
 
 def visualize_covid_data(data, output_path='./visualizations/covid_trends.png'):
     covid_summary = data.groupby('date')[['new_cases']].sum().reset_index()
@@ -79,8 +82,8 @@ def visualize_covid_data(data, output_path='./visualizations/covid_trends.png'):
 
     # Save and show
     plt.tight_layout()
-    plt.savefig(output_path)
-    plt.show()
+    st.pyplot(plt) 
+
 
 def plot_regression_results(coefficients, intercept, r2_score, feature_names, output_path='./visualizations/regression_results.png'):
     if len(coefficients) != len(feature_names):
@@ -94,5 +97,4 @@ def plot_regression_results(coefficients, intercept, r2_score, feature_names, ou
     plt.xlabel('Features')
     plt.xticks(rotation=45, ha='right')
     plt.tight_layout()
-    plt.savefig(output_path)
-    plt.show()
+    st.pyplot(plt) 
