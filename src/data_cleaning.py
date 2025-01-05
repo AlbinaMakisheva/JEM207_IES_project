@@ -29,7 +29,7 @@ def create_vaccination_signal(data, rate_column='new_vaccinations_smoothed_per_m
         raise KeyError(f"Column '{rate_column}' not found in the dataset.")
     
     # Calculate week-over-week percentage change
-    data['vaccination_signal'] = (data[rate_column].pct_change(periods=7) > threshold).astype(int)
+    data['vaccination_signal'] = (data[rate_column].pct_change(periods=7, fill_method=None) > threshold).astype(int)
     
     return data
 
