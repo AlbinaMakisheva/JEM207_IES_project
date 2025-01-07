@@ -3,6 +3,7 @@ from sklearn.linear_model import LinearRegression
 from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import accuracy_score, classification_report
 import numpy as np
 
@@ -74,6 +75,41 @@ def perform_logistic_regression(data, independent_vars, target_var='price_change
     y_pred = model.predict(X_test)
 
     print("Model Coefficients:", model.coef_)
+    print("Intercept:", model.intercept_)
+    print("Accuracy on Test Data:", accuracy_score(y_test, y_pred))
+    print("Classification Report:\n", classification_report(y_test, y_pred))
+    
+    return model
+
+def perform_extended_logistic_regression(data, extended_independent_vars, target_var='price_change'):
+    if target_var not in data.columns or not all(var in data.columns for var in extended_independent_vars):
+        missing = [var for var in [target_var] + extended_independent_vars if var not in data.columns]
+        raise KeyError(f"Missing columns: {', '.join(missing)} in the dataset.")
+    
+    # Prepare regression data
+    regression_data = data[extended_independent_vars + [target_var]].dropna()
+    X = regression_data[extended_independent_vars]
+    y = regression_data[target_var]
+
+    # Replace infinite and NaN values
+    X.replace([np.inf, -np.inf], np.nan, inplace=True)
+    X.fillna(X.mean(), inplace=True)
+
+    # Scale the data
+    scaler = StandardScaler()
+    X = scaler.fit_transform(X)
+    
+    # Split data into training and testing sets
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=42)
+    
+    # Fit logistic regression model
+    model = LogisticRegression()
+    model.fit(X_train, y_train)
+
+    # Predict on the test set
+    y_pred = model.predict(X_test)
+
+    print("Model Coefficients (Extended):", dict(zip(extended_independent_vars, model.coef_[0])))
     print("Intercept:", model.intercept_)
     print("Accuracy on Test Data:", accuracy_score(y_test, y_pred))
     print("Classification Report:\n", classification_report(y_test, y_pred))
