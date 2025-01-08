@@ -186,76 +186,74 @@ def main():
 
             # Perform logistic regression with additional features
             st.write("Performing Logistic Regression with Extended Variables...")
-            try:
-                # Add new features to the dataset
-                merged_data['deaths_to_cases_ratio'] = np.where(
-                    merged_data['new_cases_smoothed'] == 0, 0,
-                    merged_data['new_deaths_smoothed'] / merged_data['new_cases_smoothed']
-                )
-                merged_data['interaction_term'] = merged_data['new_cases_smoothed'] * merged_data['Dummy_Variable']
+            
+            # Add new features to the dataset
+            merged_data['deaths_to_cases_ratio'] = np.where(
+                merged_data['new_cases_smoothed'] == 0, 0,
+                merged_data['new_deaths_smoothed'] / merged_data['new_cases_smoothed']
+            )
+            merged_data['interaction_term'] = merged_data['new_cases_smoothed'] * merged_data['Dummy_Variable']
 
 
-                # Define the extended independent variables
-                extended_independent_vars = independent_vars + ['deaths_to_cases_ratio', 'interaction_term']
+            # Define the extended independent variables
+            extended_independent_vars = independent_vars + ['deaths_to_cases_ratio', 'interaction_term']
 
-                # Handle missing or infinite values in the extended variables
-                merged_data[extended_independent_vars + ['target']] = merged_data[extended_independent_vars + ['target']].replace(
-                    [np.inf, -np.inf], np.nan  # Replace infinite values with NaN
-                ).fillna(0)  # Replace NaN values with 0
+            # Handle missing or infinite values in the extended variables
+            merged_data[extended_independent_vars + ['target']] = merged_data[extended_independent_vars + ['target']].replace(
+                [np.inf, -np.inf], np.nan).fillna(0)  
 
-                # Ensure no extreme values exist
-                for col in extended_independent_vars:
-                    merged_data[col] = np.clip(merged_data[col], a_min=-1e6, a_max=1e6)
+            # Ensure no extreme values exist
+            for col in extended_independent_vars:
+                merged_data[col] = np.clip(merged_data[col], a_min=-1e6, a_max=1e6)
 
-                # Standardize the independent variables
-                scaler = StandardScaler()
-                scaled_extended_vars = scaler.fit_transform(merged_data[extended_independent_vars])
+            # Standardize the independent variables
+            scaler = StandardScaler()
+            scaled_extended_vars = scaler.fit_transform(merged_data[extended_independent_vars])
 
-                # Perform extended logistic regression
-                extended_logistic_model = perform_extended_logistic_regression(merged_data, extended_independent_vars, target_var='target')
+            # Perform extended logistic regression
+            extended_logistic_model, X_test, y_test = perform_extended_logistic_regression(merged_data, extended_independent_vars, target_var='target')
 
-                # Display results extended logistic regression
-                st.subheader("Extended Logistic Regression Results")
-                st.markdown("**Model Coefficients:**")
-                extended_coef_df = pd.DataFrame({
-                    'Feature': extended_independent_vars,
-                    'Coefficient': extended_logistic_model.coef_[0]
-                })
-                st.table(extended_coef_df)
+            # Display results extended logistic regression
+            st.subheader("Extended Logistic Regression Results")
+            st.markdown("**Model Coefficients:**")
+            extended_coef_df = pd.DataFrame({
+                'Feature': extended_independent_vars,
+                'Coefficient': extended_logistic_model.coef_[0]
+            })
+            st.table(extended_coef_df)
 
-                st.markdown(f"**Intercept:** {extended_logistic_model.intercept_}")
+            st.markdown(f"**Intercept:** {extended_logistic_model.intercept_}")
 
-                extended_y_pred = extended_logistic_model.predict(scaled_extended_vars)
-                extended_accuracy = accuracy_score(merged_data['target'], extended_y_pred)
-                st.markdown(f"**Accuracy on Test Data:** {extended_accuracy:.4f}")
+            extended_y_pred = extended_logistic_model.predict(scaled_extended_vars)
+            extended_accuracy = accuracy_score(merged_data['target'], extended_y_pred)
+            st.markdown(f"**Accuracy on Test Data:** {extended_accuracy:.4f}")
 
-                # Classification report for extended logistic regression
+            # Classification report for extended logistic regression
 
-                extended_report = classification_report(merged_data['target'], extended_y_pred, output_dict=True)
-                st.markdown("**Classification Report (Extended):**")
-                extended_report_df = pd.DataFrame(extended_report).transpose()
-                st.table(extended_report_df)
+            extended_report = classification_report(merged_data['target'], extended_y_pred, output_dict=True,  zero_division=0)
+            st.markdown("**Classification Report (Extended):**")
+            extended_report_df = pd.DataFrame(extended_report).transpose()
+            st.table(extended_report_df)
 
-                # Calculate ROC Curve
-                extended_y_true = merged_data['target']
-                extended_y_pred_proba = extended_logistic_model.predict_proba(scaled_extended_vars)[:, 1]
-                fpr, tpr, _ = roc_curve(extended_y_true, extended_y_pred_proba)
-                roc_auc = auc(fpr, tpr)
+            # Calculate ROC Curve
+            y_proba = extended_logistic_model.predict_proba(X_test)[:, 1]
+            fpr, tpr, _ = roc_curve(y_test, y_proba)
+            roc_auc = auc(fpr, tpr)
 
-                # Plot ROC Curve
-                fig, ax = plt.subplots()
-                ax.plot(fpr, tpr, color='darkorange', lw=2, label='ROC curve (area = %0.2f)' % roc_auc)
-                ax.plot([0, 1], [0, 1], color='navy', lw=2, linestyle='--')
-                ax.set_xlim([0.0, 1.0])
-                ax.set_ylim([0.0, 1.05])
-                ax.set_xlabel('False Positive Rate')
-                ax.set_ylabel('True Positive Rate')
-                ax.set_title('Extended Logistic Regression ROC Curve')
-                ax.legend(loc='lower right')
-                st.pyplot(fig)
+            # Plot ROC Curve
+            fig, ax = plt.subplots()
+            ax.plot(fpr, tpr, color='darkorange', lw=2, label='ROC curve (area = %0.2f)' % roc_auc)
+            ax.plot([0, 1], [0, 1], color='navy', lw=2, linestyle='--')
+            ax.set_xlim([0.0, 1.0])
+            ax.set_ylim([0.0, 1.05])
+            ax.set_xlabel('False Positive Rate')
+            ax.set_ylabel('True Positive Rate')
+            ax.set_title('Extended Logistic Regression ROC Curve')
+            ax.legend(loc='lower right')
+            st.pyplot(fig)
 
-            except KeyError as e:
-                st.error(f"Error with extended logistic regression: {e}")
+        except KeyError as e:
+            st.error(f"Error with extended logistic regression: {e}")
 
     elif tab == "COVID-19 Map":
         st.write("Displaying the COVID-19 Interactive Map...")

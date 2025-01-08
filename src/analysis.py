@@ -82,41 +82,46 @@ def perform_logistic_regression(data, independent_vars, target_var='price_change
     return model
 
 def perform_extended_logistic_regression(data, extended_independent_vars, target_var='price_change'):
-    if target_var not in data.columns or not all(var in data.columns for var in extended_independent_vars):
-        missing = [var for var in [target_var] + extended_independent_vars if var not in data.columns]
+    missing = [var for var in [target_var] + extended_independent_vars if var not in data.columns]
+    if missing:
         raise KeyError(f"Missing columns: {', '.join(missing)} in the dataset.")
     
     # Prepare regression data
+    data.replace([np.inf, -np.inf], np.nan, inplace=True)
+    data.fillna(0, inplace=True)
     regression_data = data[extended_independent_vars + [target_var]].dropna()
     X = regression_data[extended_independent_vars]
     y = regression_data[target_var]
 
     # Replace infinite and NaN values
-    X.replace([np.inf, -np.inf], np.nan, inplace=True)
-    X.fillna(X.mean(), inplace=True)
+    #X.replace([np.inf, -np.inf], np.nan, inplace=True)
+    #X.fillna(X.mean(), inplace=True)
 
     # Scale the data
     scaler = StandardScaler()
-    X = scaler.fit_transform(X)
+    X_scaled = scaler.fit_transform(X)
+
+    # Address class imbalance
+    from imblearn.over_sampling import SMOTE
+    smote = SMOTE(random_state=42)
+    X_resampled, y_resampled = smote.fit_resample(X, y)
     
     # Split data into training and testing sets
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=42)
+    X_train, X_test, y_train, y_test = train_test_split(X_resampled, y_resampled, test_size=0.3, random_state=42)
     
     # Fit logistic regression model
-    model = LogisticRegression()
-    model.fit(X_train, y_train)
+    extended_logistic_model = LogisticRegression(max_iter=1000, random_state=42)
+    extended_logistic_model.fit(X_train, y_train)
 
     # Predict on the test set
-    y_pred = model.predict(X_test)
+    y_pred = extended_logistic_model.predict(X_test)
 
-    print("Model Coefficients (Extended):", dict(zip(extended_independent_vars, model.coef_[0])))
-    print("Intercept:", model.intercept_)
+    print("Model Coefficients (Extended):", dict(zip(extended_independent_vars, extended_logistic_model.coef_[0])))
+    print("Intercept:", extended_logistic_model.intercept_)
     print("Accuracy on Test Data:", accuracy_score(y_test, y_pred))
-    print("Classification Report:\n", classification_report(y_test, y_pred))
+    print("Classification Report:\n", classification_report(y_test, y_pred, zero_division=0))
     
-    return model
-
-
+    return extended_logistic_model, X_test, y_test
 
 # Perform Random Forest classification
 def perform_random_forest(data, independent_vars, target_var='price_change'):
