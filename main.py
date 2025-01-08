@@ -181,9 +181,6 @@ def main():
             feature_importance.plot(kind='barh', x='Feature', y='Importance')
             st.pyplot(plt)
 
-        except KeyError as e:
-            st.error(f"Analysis error: {e}")
-
             # Perform logistic regression with additional features
             st.write("Performing Logistic Regression with Extended Variables...")
             
@@ -198,6 +195,8 @@ def main():
             # Define the extended independent variables
             extended_independent_vars = independent_vars + ['deaths_to_cases_ratio', 'interaction_term']
 
+            merged_data[extended_independent_vars] = merged_data[extended_independent_vars].replace([np.inf, -np.inf], np.nan).fillna(0)
+
             # Handle missing or infinite values in the extended variables
             merged_data[extended_independent_vars + ['target']] = merged_data[extended_independent_vars + ['target']].replace(
                 [np.inf, -np.inf], np.nan).fillna(0)  
@@ -211,6 +210,7 @@ def main():
             scaled_extended_vars = scaler.fit_transform(merged_data[extended_independent_vars])
 
             # Perform extended logistic regression
+        
             extended_logistic_model, X_test, y_test = perform_extended_logistic_regression(merged_data, extended_independent_vars, target_var='target')
 
             # Display results extended logistic regression
@@ -230,15 +230,22 @@ def main():
 
             # Classification report for extended logistic regression
 
-            extended_report = classification_report(merged_data['target'], extended_y_pred, output_dict=True,  zero_division=0)
-            st.markdown("**Classification Report (Extended):**")
+            extended_report = classification_report(y_test, extended_logistic_model.predict(X_test), output_dict=True, zero_division=0)
             extended_report_df = pd.DataFrame(extended_report).transpose()
+            st.markdown("**Classification Report (Extended):**")
             st.table(extended_report_df)
 
+            st.markdown("### Model Performance Plots")
+
             # Calculate ROC Curve
-            y_proba = extended_logistic_model.predict_proba(X_test)[:, 1]
+            if extended_logistic_model.classes_.shape[0] > 1:
+                y_proba = extended_logistic_model.predict_proba(X_test)[:, 1]
+            else:
+                st.error("ROC Curve cannot be computed: Model outputs only one class.")
             fpr, tpr, _ = roc_curve(y_test, y_proba)
             roc_auc = auc(fpr, tpr)
+
+            st.write(f"**ROC AUC:** {roc_auc:.4f}")
 
             # Plot ROC Curve
             fig, ax = plt.subplots()
@@ -252,9 +259,31 @@ def main():
             ax.legend(loc='lower right')
             st.pyplot(fig)
 
-        except KeyError as e:
-            st.error(f"Error with extended logistic regression: {e}")
+            # Perform Random Forest classification
+            st.write("Performing Random Forest Classification...")
+            rf_model_2 = perform_random_forest(merged_data, extended_independent_vars)
 
+            # Display the feature importance
+            feature_importance = pd.DataFrame({
+                'Feature': extended_independent_vars,  
+                'Importance': rf_model_2.feature_importances_
+            })
+            st.subheader("Random Forest Feature Importance")
+            st.table(feature_importance)
+
+            # Plot the feature importance
+            feature_importance.plot(kind='barh', x='Feature', y='Importance', legend=False)
+            plt.title('Random Forest Feature Importance')
+            plt.xlabel('Importance')
+            plt.ylabel('Feature')
+            plt.show()
+
+            feature_importance.plot(kind='barh', x='Feature', y='Importance')
+            st.pyplot(plt)
+
+        except KeyError as e:
+            st.error(f"Analysis error: {e}")
+            
     elif tab == "COVID-19 Map":
         st.write("Displaying the COVID-19 Interactive Map...")
         covid_data = clean_data(COVID_FILE)
