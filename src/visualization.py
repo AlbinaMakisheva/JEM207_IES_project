@@ -4,6 +4,7 @@ import plotly.express as px
 from pathlib import Path
 import streamlit as st
 import matplotlib.dates as mdates
+from sklearn.metrics import accuracy_score, classification_report, roc_curve, auc
 import pandas as pd
 
 # Plots smoothed COVID-19 cases globally over time
@@ -98,3 +99,30 @@ def plot_regression_results(coefficients, intercept, r2_score, feature_names, ou
     plt.xticks(rotation=45, ha='right')
     plt.tight_layout()
     st.pyplot(plt) 
+
+def plot_roc_curve(fpr, tpr, roc_auc, title="ROC Curve"):
+    fig, ax = plt.subplots()
+    ax.plot(fpr, tpr, color='darkorange', lw=2, label=f'ROC curve (area = {roc_auc:.2f})')
+    ax.plot([0, 1], [0, 1], color='navy', lw=2, linestyle='--')
+    ax.set_xlim([0.0, 1.0])
+    ax.set_ylim([0.0, 1.05])
+    ax.set_xlabel('False Positive Rate')
+    ax.set_ylabel('True Positive Rate')
+    ax.set_title(title)
+    ax.legend(loc='lower right')
+    st.pyplot(fig)
+
+def plot_feature_importance(feature_importance_df, title="Feature Importance"):
+    feature_importance_df.plot(kind='barh', x='Feature', y='Importance', legend=False)
+    plt.title(title)
+    plt.xlabel('Importance')
+    plt.ylabel('Feature')
+    plt.show()
+    st.pyplot(plt)
+
+
+def display_classification_report(y_true, y_pred, model_name="Model"):
+    report = classification_report(y_true, y_pred, output_dict=True)
+    report_df = pd.DataFrame(report).transpose()
+    st.write(f"{model_name} Classification Report:")
+    st.dataframe(report_df)
