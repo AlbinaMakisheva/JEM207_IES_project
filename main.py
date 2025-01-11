@@ -1,14 +1,16 @@
 import os
 import pandas as pd
+import numpy as np
 import streamlit as st
 import plotly.express as px
 from src.data_cleaning import clean_data
 from src.data_merging import merge_data
 import matplotlib.pyplot as plt 
-from src.analysis import filter_data_around_events, perform_multiple_linear_regression, analyze_event_impact, prepare_binary_target, perform_logistic_regression, perform_random_forest
+from src.analysis import filter_data_around_events, perform_multiple_linear_regression, analyze_event_impact, prepare_binary_target, perform_logistic_regression, perform_extended_logistic_regression, perform_random_forest
 from src.visualization import plot_covid_cases, plot_stock_with_events, visualize_covid_data, plot_regression_results
 from src.data_fetching import fetch_covid_data, fetch_stock_data
-from sklearn.metrics import accuracy_score
+from sklearn.metrics import accuracy_score, classification_report, roc_curve, auc
+from sklearn.preprocessing import StandardScaler
 
 
 # File paths
@@ -43,6 +45,11 @@ def main():
     stock_data = clean_data(STOCK_FILE, is_stock=True) 
 
     merged_data = merge_data(covid_data, stock_data, events) 
+
+    # Apply log transformation to selected variables
+    variables_to_log_transform = ['new_deaths_smoothed', 'new_cases_smoothed']
+    non_negative_data = merged_data[variables_to_log_transform]
+    merged_data[variables_to_log_transform] = np.log1p(non_negative_data)
 
     # Create tabs
     tab = st.sidebar.radio("Select a Tab", ("Introduction", "Analysis", "COVID-19 Map"))
@@ -125,18 +132,18 @@ def main():
             st.markdown(f"**Accuracy on Test Data:** {logistic_model.score(merged_data[independent_vars], merged_data['target']):.4f}")
 
             from sklearn.metrics import classification_report
-            y_true = merged_data['target']
-            y_pred = logistic_model.predict(merged_data[independent_vars])
-            report = classification_report(y_true, y_pred, output_dict=True)
+            y_true_logistic = merged_data['target']
+            y_pred_logistic = logistic_model.predict(merged_data[independent_vars])
+            logistic_report = classification_report(y_true_logistic, y_pred_logistic, output_dict=True)
 
             st.markdown("**Classification Report:**")
-            report_df = pd.DataFrame(report).transpose()
-            st.table(report_df)
+            logistic_report_df = pd.DataFrame(logistic_report).transpose()
+            st.table(logistic_report_df)
 
             st.markdown("### Model Performance Plots")
             # Add ROC curve plot:
             from sklearn.metrics import roc_curve, auc
-            fpr, tpr, _ = roc_curve(y_true, logistic_model.predict_proba(merged_data[independent_vars])[:, 1])
+            fpr, tpr, _ = roc_curve(y_true_logistic, logistic_model.predict_proba(merged_data[independent_vars])[:, 1])
             roc_auc = auc(fpr, tpr)
 
             st.write(f"**ROC AUC:** {roc_auc:.4f}")
@@ -174,10 +181,109 @@ def main():
             feature_importance.plot(kind='barh', x='Feature', y='Importance')
             st.pyplot(plt)
 
+            # Perform logistic regression with additional features
+            st.write("Performing Logistic Regression with Extended Variables...")
+            
+            # Add new features to the dataset
+            merged_data['deaths_to_cases_ratio'] = np.where(
+                merged_data['new_cases_smoothed'] == 0, 0,
+                merged_data['new_deaths_smoothed'] / merged_data['new_cases_smoothed']
+            )
+            merged_data['interaction_term'] = merged_data['new_cases_smoothed'] * merged_data['Dummy_Variable']
+
+
+            # Define the extended independent variables
+            extended_independent_vars = independent_vars + ['deaths_to_cases_ratio', 'interaction_term']
+
+            merged_data[extended_independent_vars] = merged_data[extended_independent_vars].replace([np.inf, -np.inf], np.nan).fillna(0)
+
+            # Handle missing or infinite values in the extended variables
+            merged_data[extended_independent_vars + ['target']] = merged_data[extended_independent_vars + ['target']].replace(
+                [np.inf, -np.inf], np.nan).fillna(0)  
+
+            # Ensure no extreme values exist
+            for col in extended_independent_vars:
+                merged_data[col] = np.clip(merged_data[col], a_min=-1e6, a_max=1e6)
+
+            # Standardize the independent variables
+            scaler = StandardScaler()
+            scaled_extended_vars = scaler.fit_transform(merged_data[extended_independent_vars])
+
+            # Perform extended logistic regression
+        
+            extended_logistic_model, X_test, y_test = perform_extended_logistic_regression(merged_data, extended_independent_vars, target_var='target')
+
+            # Display results extended logistic regression
+            st.subheader("Extended Logistic Regression Results")
+            st.markdown("**Model Coefficients:**")
+            extended_coef_df = pd.DataFrame({
+                'Feature': extended_independent_vars,
+                'Coefficient': extended_logistic_model.coef_[0]
+            })
+            st.table(extended_coef_df)
+
+            st.markdown(f"**Intercept:** {extended_logistic_model.intercept_}")
+
+            extended_y_pred = extended_logistic_model.predict(scaled_extended_vars)
+            extended_accuracy = accuracy_score(merged_data['target'], extended_y_pred)
+            st.markdown(f"**Accuracy on Test Data:** {extended_accuracy:.4f}")
+
+            # Classification report for extended logistic regression
+
+            extended_report = classification_report(y_test, extended_logistic_model.predict(X_test), output_dict=True, zero_division=0)
+            extended_report_df = pd.DataFrame(extended_report).transpose()
+            st.markdown("**Classification Report (Extended):**")
+            st.table(extended_report_df)
+
+            st.markdown("### Model Performance Plots")
+
+            # Calculate ROC Curve
+            if extended_logistic_model.classes_.shape[0] > 1:
+                y_proba = extended_logistic_model.predict_proba(X_test)[:, 1]
+            else:
+                st.error("ROC Curve cannot be computed: Model outputs only one class.")
+            fpr, tpr, _ = roc_curve(y_test, y_proba)
+            roc_auc = auc(fpr, tpr)
+
+            st.write(f"**ROC AUC:** {roc_auc:.4f}")
+
+            # Plot ROC Curve
+            fig, ax = plt.subplots()
+            ax.plot(fpr, tpr, color='darkorange', lw=2, label='ROC curve (area = %0.2f)' % roc_auc)
+            ax.plot([0, 1], [0, 1], color='navy', lw=2, linestyle='--')
+            ax.set_xlim([0.0, 1.0])
+            ax.set_ylim([0.0, 1.05])
+            ax.set_xlabel('False Positive Rate')
+            ax.set_ylabel('True Positive Rate')
+            ax.set_title('Extended Logistic Regression ROC Curve')
+            ax.legend(loc='lower right')
+            st.pyplot(fig)
+
+            # Perform Random Forest classification
+            st.write("Performing Random Forest Classification...")
+            rf_model_2 = perform_random_forest(merged_data, extended_independent_vars)
+
+            # Display the feature importance
+            feature_importance = pd.DataFrame({
+                'Feature': extended_independent_vars,  
+                'Importance': rf_model_2.feature_importances_
+            })
+            st.subheader("Random Forest Feature Importance")
+            st.table(feature_importance)
+
+            # Plot the feature importance
+            feature_importance.plot(kind='barh', x='Feature', y='Importance', legend=False)
+            plt.title('Random Forest Feature Importance')
+            plt.xlabel('Importance')
+            plt.ylabel('Feature')
+            plt.show()
+
+            feature_importance.plot(kind='barh', x='Feature', y='Importance')
+            st.pyplot(plt)
+
         except KeyError as e:
             st.error(f"Analysis error: {e}")
-
-
+            
     elif tab == "COVID-19 Map":
         st.write("Displaying the COVID-19 Interactive Map...")
         covid_data = clean_data(COVID_FILE)
