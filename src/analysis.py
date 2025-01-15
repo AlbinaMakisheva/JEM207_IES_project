@@ -4,7 +4,7 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
-from sklearn.metrics import accuracy_score, classification_report, roc_curve, auc
+from sklearn.metrics import accuracy_score, classification_report
 import numpy as np
 
 # Filter data around key events
@@ -38,17 +38,14 @@ def perform_multiple_linear_regression(data, dependent_var, independent_vars):
     return model, r2_score
 
 # Analyze the impact of events on stock returns
-def analyze_event_impact(merged_data, events, window_size):
-    results = {}
-    for event, event_date in events.items():
-        event_window = (merged_data['date'] >= pd.to_datetime(event_date) - pd.DateOffset(months=window_size)) & \
-                       (merged_data['date'] <= pd.to_datetime(event_date) + pd.DateOffset(months=window_size))
-        event_data = merged_data[event_window]
-        X = event_data[['new_vaccinations_smoothed', 'new_deaths_smoothed']]
-        y = event_data['daily_return']
-        model = LinearRegression().fit(X, y)
-        results[event] = model.score(X, y)
-    return results
+def analyze_event_impact(data, event_column='Dummy_Variable', return_column='daily_return'):
+    if event_column not in data.columns or return_column not in data.columns:
+        raise KeyError(f"Columns '{event_column}' or '{return_column}' not found in the dataset.")
+    
+    # Group by event occurrence and calculate mean returns
+    event_impact = data.groupby(event_column)[return_column].mean().reset_index()
+    print("Event Impact Analysis:\n", event_impact)
+    return event_impact
 
 
 def prepare_binary_target(df, price_column='close'):
@@ -58,7 +55,7 @@ def prepare_binary_target(df, price_column='close'):
 
 
 # Perform logistic regression
-def perform_logistic_regression(data, independent_vars, target_var='target'):
+def perform_logistic_regression(data, independent_vars, target_var='price_change'):
     if target_var not in data.columns or not all(var in data.columns for var in independent_vars):
         missing = [var for var in [target_var] + independent_vars if var not in data.columns]
         raise KeyError(f"Missing columns: {', '.join(missing)} in the dataset.")
@@ -70,50 +67,64 @@ def perform_logistic_regression(data, independent_vars, target_var='target'):
     # Split data into 2 sets
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=42) 
     
-    # Fit logistic  model
+    # Fit logistic regression model
     model = LogisticRegression()
     model.fit(X_train, y_train)
 
     # Predict on the test set
     y_pred = model.predict(X_test)
 
-    accuracy = accuracy_score(y_test, y_pred)
-
-    fpr, tpr, _ = roc_curve(y_test, model.predict_proba(X_test)[:, 1])
-    roc_auc = auc(fpr, tpr)
-
-    return model, accuracy, fpr, tpr, roc_auc
-
-def perform_extended_logistic_regression(data, independent_vars, target_var='target'):
-    if target_var not in data.columns or not all(var in data.columns for var in independent_vars):
-        missing = [var for var in [target_var] + independent_vars if var not in data.columns]
-        raise KeyError(f"Missing columns: {', '.join(missing)} in the dataset.")
-
-    # Prepare data for training
-    log_data = data[independent_vars + [target_var]].dropna()
-    X = log_data[independent_vars]
-    y = log_data[target_var]
+    print("Model Coefficients:", model.coef_)
+    print("Intercept:", model.intercept_)
+    print("Accuracy on Test Data:", accuracy_score(y_test, y_pred))
+    print("Classification Report:\n", classification_report(y_test, y_pred))
     
-    # Split data into 2 sets
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=42)
+    return model
 
-    # Fit Logistic Regression model
-    log_model = LogisticRegression(max_iter=10000)
-    log_model.fit(X_train, y_train)
+def perform_extended_logistic_regression(data, extended_independent_vars, target_var='price_change'):
+    missing = [var for var in [target_var] + extended_independent_vars if var not in data.columns]
+    if missing:
+        raise KeyError(f"Missing columns: {', '.join(missing)} in the dataset.")
+    
+    # Prepare regression data
+    data.replace([np.inf, -np.inf], np.nan, inplace=True)
+    data.fillna(0, inplace=True)
+    regression_data = data[extended_independent_vars + [target_var]].dropna()
+    X = regression_data[extended_independent_vars]
+    y = regression_data[target_var]
+
+    # Replace infinite and NaN values
+    #X.replace([np.inf, -np.inf], np.nan, inplace=True)
+    #X.fillna(X.mean(), inplace=True)
+
+    # Scale the data
+    scaler = StandardScaler()
+    X_scaled = scaler.fit_transform(X)
+
+    # Address class imbalance
+    from imblearn.over_sampling import SMOTE
+    smote = SMOTE(random_state=42)
+    X_resampled, y_resampled = smote.fit_resample(X, y)
+    
+    # Split data into training and testing sets
+    X_train, X_test, y_train, y_test = train_test_split(X_resampled, y_resampled, test_size=0.3, random_state=42)
+    
+    # Fit logistic regression model
+    extended_logistic_model = LogisticRegression(max_iter=1000, random_state=42)
+    extended_logistic_model.fit(X_train, y_train)
 
     # Predict on the test set
-    y_pred = log_model.predict(X_test)
+    y_pred = extended_logistic_model.predict(X_test)
 
-    accuracy = accuracy_score(y_test, y_pred)
-
-    fpr, tpr, _ = roc_curve(y_test, log_model.predict_proba(X_test)[:, 1])
-    roc_auc = auc(fpr, tpr)
+    print("Model Coefficients (Extended):", dict(zip(extended_independent_vars, extended_logistic_model.coef_[0])))
+    print("Intercept:", extended_logistic_model.intercept_)
+    print("Accuracy on Test Data:", accuracy_score(y_test, y_pred))
+    print("Classification Report:\n", classification_report(y_test, y_pred, zero_division=0))
     
-    return log_model, accuracy, fpr, tpr, roc_auc, X_test, y_test
-
+    return extended_logistic_model, X_test, y_test
 
 # Perform Random Forest classification
-def perform_random_forest(data, independent_vars, target_var='target'):
+def perform_random_forest(data, independent_vars, target_var='price_change'):
     if target_var not in data.columns or not all(var in data.columns for var in independent_vars):
         missing = [var for var in [target_var] + independent_vars if var not in data.columns]
         raise KeyError(f"Missing columns: {', '.join(missing)} in the dataset.")
@@ -130,16 +141,9 @@ def perform_random_forest(data, independent_vars, target_var='target'):
     rf_model = RandomForestClassifier(n_estimators=100, random_state=42)
     rf_model.fit(X_train, y_train)
 
-    # Predict on the test set
     y_pred = rf_model.predict(X_test)
-
-    accuracy = accuracy_score(y_test, y_pred)
-
-    fpr, tpr, _ = roc_curve(y_test, rf_model.predict_proba(X_test)[:, 1])
-    roc_auc = auc(fpr, tpr)
     
-    return rf_model, accuracy, fpr, tpr, roc_auc
-
+    return rf_model
 
 # Function to display the results in Streamlit
 def display_analysis_results(regression_model, r2_score, event_impact, rf_model):
