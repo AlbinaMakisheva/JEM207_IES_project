@@ -6,7 +6,7 @@ import plotly.express as px
 from src.data_cleaning import clean_data
 from src.data_merging import merge_data
 import matplotlib.pyplot as plt 
-from src.analysis import filter_data_around_events, perform_multiple_linear_regression, analyze_event_impact, prepare_binary_target, perform_logistic_regression, perform_extended_logistic_regression, perform_random_forest
+from src.analysis import filter_data_around_events, plot_lag_correlations,check_stationarity, reduce_multicollinearity, perform_multiple_linear_regression, analyze_event_impact, prepare_binary_target, perform_logistic_regression, perform_extended_logistic_regression, perform_random_forest
 from src.visualization import plot_covid_cases, plot_stock_with_events, visualize_covid_data, plot_regression_results
 from src.data_fetching import fetch_covid_data, fetch_stock_data
 from sklearn.metrics import accuracy_score, classification_report, roc_curve, auc
@@ -78,6 +78,32 @@ def main():
         window_size = st.slider("Select window size around events (in months)", 1, 12, 3)
         filtered_data = filter_data_around_events(merged_data, events, window_months=window_size)
 
+        try:
+            # Perform autocorrelation analysis
+            st.write("Performing autocorrelation analysis...")
+            plot_lag_correlations(merged_data, lag=1)
+
+            st.write("""
+                With this analysis, we aim to investigate the autocorrelation between variables in order to help us building models that predict new trends. 
+                It is worth noticing that most variables namely total_cases, new_cases, new_cases_smoothed, total_deaths and new_deaths present high autocorrelation values. This indicate that many of our variables are highly dependent on their previous values at lag 1.
+                However, one could also argue that this is a common feature of cumulative variables (which give the cumulative sums over time) and smoothed variables (which are designed to reduce short-term fluctuations).
+                Nevertheless, we will focus on variables with much lower correlation, since they are the ones which might add much new information to our regressions.
+            """)
+        except KeyError as e:
+            st.error(f"Error during autocorrelation analysis: {e}")
+
+        try:
+            #Check Stationarity: Augmented Dickey-Fuller Test
+            st.write("Perfoming Stationarity...")
+            stationarity_results = check_stationarity(merged_data)
+
+            # Reduce multicollinearity
+            st.write("Analyzing multicollinearity (VIF)...")
+            vif_results = reduce_multicollinearity(merged_data, threshold=10)
+        except KeyError as e:
+            st.error(f"Error during stationarity and multicollinearity analysis: {e}")
+        
+        
         try:
             # Perform multiple linear regression
             st.write("Performing Regression Analysis...")

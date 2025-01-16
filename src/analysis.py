@@ -6,6 +6,13 @@ from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import accuracy_score, classification_report
 import numpy as np
+import matplotlib.pyplot as plt
+import streamlit as st
+from statsmodels.tsa.stattools import adfuller
+from statsmodels.stats.outliers_influence import variance_inflation_factor
+
+from .data_merging import merge_data
+
 
 # Filter data around key events
 def filter_data_around_events(data, events, window_months=1, date_column='date'):
@@ -21,6 +28,101 @@ def filter_data_around_events(data, events, window_months=1, date_column='date')
         filtered_data = pd.concat([filtered_data, event_data], ignore_index=True)
     
     return filtered_data
+
+
+#Testing autocorrelation between variables
+
+def plot_lag_correlations(data, lag=1):
+    """
+    Plots lag correlations for all numeric columns in the DataFrame.
+    
+    Parameters:
+    - data (pd.DataFrame): The input DataFrame with numeric columns.
+    - lag (int): The lag to use for correlation analysis.
+    
+    Raises:
+    - ValueError: If `data` contains no numeric columns.
+    """
+    # Ensure `data` is a DataFrame
+    if not isinstance(data, pd.DataFrame):
+        raise ValueError(f"Expected a Pandas DataFrame, but got {type(data)}")
+
+    # Filter numeric columns only
+    numeric_data = data.select_dtypes(include=['number'])
+
+    # Check if there are numeric columns to process
+    if numeric_data.empty:
+        raise ValueError("The DataFrame contains no numeric columns for analysis.")
+    
+    # Create lagged DataFrame
+    lagged_data = numeric_data.shift(lag)
+    
+    # Compute correlation matrix between original and lagged data
+    corr_matrix = numeric_data.corrwith(lagged_data, axis=0)
+    st.write(f"Autocorrelation at lag {lag} for all variables:")
+    st.dataframe(corr_matrix)  # Display as a DataFrame in Streamlit
+    
+    # Visualize lag plots for all numeric variables
+    for column in numeric_data.columns:
+        fig, ax = plt.subplots(figsize=(6, 4))
+        pd.plotting.lag_plot(numeric_data[column], lag=lag, ax=ax)
+        ax.set_title(f'Lag-{lag} Autocorrelation for {column}')
+        ax.set_xlabel(f'{column} (t)')
+        ax.set_ylabel(f'{column} (t-{lag})')
+        st.pyplot(fig) 
+
+#Perfoming Stationarity: Augmented Dickey-Fuller Test
+
+def check_stationarity(data):
+    # Filter numeric columns
+    numeric_data = data.select_dtypes(include=['number'])
+    
+    results = []
+    for column in numeric_data.columns:
+        adf_result = adfuller(numeric_data[column].dropna())
+        results.append({
+            'Variable': column,
+            'ADF Statistic': adf_result[0],
+            'p-value': adf_result[1]
+        })
+    
+    # Convert results to a DataFrame
+    results_df = pd.DataFrame(results)
+    
+    st.write("Stationarity Test Results (ADF Test):")
+    st.table(results_df)
+    
+    return results_df
+
+# Reduce Multicollinearity: Variance Inflation Factor (VIF)
+
+def reduce_multicollinearity(data, threshold=10):
+    """
+    Checks for multicollinearity using Variance Inflation Factor (VIF) and identifies problematic variables.
+    """
+    # Filter numeric columns
+    numeric_data = data.select_dtypes(include=['number']).dropna()
+    
+    # Compute VIF for each numeric column
+    vif_data = pd.DataFrame()
+    vif_data['Feature'] = numeric_data.columns
+    vif_data['VIF'] = [
+        variance_inflation_factor(numeric_data.values, i) 
+        for i in range(numeric_data.shape[1])
+    ]
+    
+    st.write("Multicollinearity Analysis (VIF):")
+    st.table(vif_data)
+    
+    # Identify features with high VIF
+    high_vif_features = vif_data[vif_data['VIF'] > threshold]
+    if not high_vif_features.empty:
+        st.warning("Features with high VIF (potential multicollinearity):")
+        st.table(high_vif_features)
+    else:
+        st.success("No multicollinearity detected (VIF below threshold).")
+    
+    return vif_data
 
 # Perform regression analysis
 def perform_multiple_linear_regression(data, dependent_var, independent_vars):
