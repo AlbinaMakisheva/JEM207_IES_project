@@ -1,7 +1,7 @@
 import pandas as pd
 from sklearn.linear_model import LinearRegression
 from sklearn.linear_model import LogisticRegression
-from sklearn.ensemble import RandomForestClassifier
+from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import accuracy_score, classification_report
@@ -71,6 +71,70 @@ def plot_lag_correlations(data, lag=1):
         ax.set_ylabel(f'{column} (t-{lag})')
         st.pyplot(fig) 
 
+#Categorize Variables by Autocorrelation
+
+def categorize_by_autocorrelation(data, lag=1, high_threshold=0.9, moderate_threshold=0.5):
+    """
+    Categorize variables into high, moderate, and low autocorrelation groups based on their autocorrelation values.
+
+    """
+    # Select numeric columns only
+    numeric_data = data.select_dtypes(include=['number'])
+    
+    # Compute autocorrelations
+    autocorrelation_values = {}
+    for column in numeric_data.columns:
+        autocorrelation = numeric_data[column].autocorr(lag=lag)
+        autocorrelation_values[column] = autocorrelation
+
+    # Categorize variables
+    high_autocorrelation = [var for var, value in autocorrelation_values.items() if value > high_threshold]
+    moderate_autocorrelation = [var for var, value in autocorrelation_values.items() if moderate_threshold < value <= high_threshold]
+    low_autocorrelation = [var for var, value in autocorrelation_values.items() if value <= moderate_threshold]
+
+    # Return categorized variables
+    return {
+        'high': high_autocorrelation,
+        'moderate': moderate_autocorrelation,
+        'low': low_autocorrelation
+    }
+
+#Calculate feature importance using Random Forest
+
+def calculate_feature_importance(data, target_var):
+    # Split dataset into features (X) and target (y)
+    X = data.drop(columns=[target_var]).select_dtypes(include='number').fillna(0)  # Fill NaN values
+    y = data[target_var]
+
+    rf = RandomForestRegressor(
+        n_estimators=50,   # Reduce number of trees 
+        max_depth=10,      # Limit depth of each tree
+        random_state=42
+    )
+    
+    rf.fit(X, y)
+
+    feature_importance = pd.DataFrame({
+        'Feature': X.columns,
+        'Importance': rf.feature_importances_
+    }).sort_values(by='Importance', ascending=False)
+
+    return feature_importance
+
+
+#Apply Differencing to High Autocorrelation Variables
+
+def apply_differencing(data, high_autocorrelation_vars):
+    """
+    Apply differencing to high-autocorrelation variables to make them stationary.
+
+    """
+    for var in high_autocorrelation_vars:
+        # Create a new column for the differenced variable
+        data[f'diff_{var}'] = data[var].diff()
+    
+    return data
+
 #Perfoming Stationarity: Augmented Dickey-Fuller Test
 
 def check_stationarity(data):
@@ -79,11 +143,25 @@ def check_stationarity(data):
     
     results = []
     for column in numeric_data.columns:
-        adf_result = adfuller(numeric_data[column].dropna())
+        series = numeric_data[column].dropna()
+        
+        # Skip constant columns
+        if series.nunique() <= 1:  
+            results.append({
+                'Variable': column,
+                'ADF Statistic': None,
+                'p-value': None,
+                'Stationary': 'Constant'
+            })
+            continue
+        
+        # Perform ADF test
+        adf_result = adfuller(series)
         results.append({
             'Variable': column,
             'ADF Statistic': adf_result[0],
-            'p-value': adf_result[1]
+            'p-value': adf_result[1],
+            'Stationary': 'Yes' if adf_result[1] < 0.05 else 'No'
         })
     
     # Convert results to a DataFrame

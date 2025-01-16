@@ -6,7 +6,7 @@ import plotly.express as px
 from src.data_cleaning import clean_data
 from src.data_merging import merge_data
 import matplotlib.pyplot as plt 
-from src.analysis import filter_data_around_events, plot_lag_correlations,check_stationarity, reduce_multicollinearity, perform_multiple_linear_regression, analyze_event_impact, prepare_binary_target, perform_logistic_regression, perform_extended_logistic_regression, perform_random_forest
+from src.analysis import filter_data_around_events, plot_lag_correlations, categorize_by_autocorrelation, calculate_feature_importance, apply_differencing, check_stationarity, reduce_multicollinearity, perform_multiple_linear_regression, analyze_event_impact, prepare_binary_target, perform_logistic_regression, perform_extended_logistic_regression, perform_random_forest
 from src.visualization import plot_covid_cases, plot_stock_with_events, visualize_covid_data, plot_regression_results
 from src.data_fetching import fetch_covid_data, fetch_stock_data
 from sklearn.metrics import accuracy_score, classification_report, roc_curve, auc
@@ -78,6 +78,7 @@ def main():
         window_size = st.slider("Select window size around events (in months)", 1, 12, 3)
         filtered_data = filter_data_around_events(merged_data, events, window_months=window_size)
 
+    
         try:
             # Perform autocorrelation analysis
             st.write("Performing autocorrelation analysis...")
@@ -92,17 +93,73 @@ def main():
         except KeyError as e:
             st.error(f"Error during autocorrelation analysis: {e}")
 
+
         try:
-            #Check Stationarity: Augmented Dickey-Fuller Test
+            #Categorize variables by autocorrelation
+            st.write("Categorizing variables by autocorrelation...")
+
+            autocorrelation_categories = categorize_by_autocorrelation(merged_data, lag=1)
+
+            # Access the categorized variables
+            high_autocorrelation_vars = autocorrelation_categories['high']
+            moderate_autocorrelation_vars = autocorrelation_categories['moderate']
+            low_autocorrelation_vars = autocorrelation_categories['low']
+
+            # Display results in Streamlit
+            st.write("### Autocorrelation Categories")
+            st.write("#### High Autocorrelation Variables:")
+            st.write(high_autocorrelation_vars)
+            st.write("#### Moderate Autocorrelation Variables:")
+            st.write(moderate_autocorrelation_vars)
+            st.write("#### Low Autocorrelation Variables:")
+            st.write(low_autocorrelation_vars)
+
+            st.write("Select relevant variables based on importance...")
+
+            #Calculate feature importance using Random Forest
+            st.write("Calculating feature importance...")
+            feature_importance = calculate_feature_importance(merged_data, target_var='daily_return') 
+            st.write("Feature importance calculated:")
+            st.table(feature_importance)
+
+            top_variables = feature_importance['Feature'].head(10).tolist() 
+            critical_high_autocorrelation_vars = [var for var in high_autocorrelation_vars if var in top_variables]
+
+            st.write("Critical High Autocorrelation Variables:", critical_high_autocorrelation_vars)
+            
+        
+            # Apply differencing to critical variables
+            st.write("Applying differencing to critical variables...")
+            merged_data = apply_differencing(merged_data, critical_high_autocorrelation_vars)
+
+            st.write("Differencing applied. New columns added:")
+            st.write([f'diff_{var}' for var in critical_high_autocorrelation_vars])
+
+        except KeyError as e:
+            st.error(f"Error during analysis: {e}")
+
+
+        try:
+            #Combine all variables for testing
+            test_variables = (
+                [f'diff_{var}' for var in critical_high_autocorrelation_vars] +
+                moderate_autocorrelation_vars +
+                low_autocorrelation_vars
+            )
+
+            #Check Stationarity on selected variables: Augmented Dickey-Fuller Test
             st.write("Perfoming Stationarity...")
-            stationarity_results = check_stationarity(merged_data)
+            stationarity_results = check_stationarity(merged_data[test_variables])
+            st.table(stationarity_results)
 
             # Reduce multicollinearity
             st.write("Analyzing multicollinearity (VIF)...")
-            vif_results = reduce_multicollinearity(merged_data, threshold=10)
+            vif_results = reduce_multicollinearity(merged_data[test_variables], threshold=10)
+            st.table(vif_results)
+        
         except KeyError as e:
             st.error(f"Error during stationarity and multicollinearity analysis: {e}")
-        
+
         
         try:
             # Perform multiple linear regression
