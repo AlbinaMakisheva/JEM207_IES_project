@@ -78,7 +78,7 @@ def main():
         window_size = st.slider("Select window size around events (in months)", 1, 12, 3)
         filtered_data = filter_data_around_events(merged_data, events, window_months=window_size)
 
-    
+        '''
         try:
             # Perform autocorrelation analysis
             st.write("Performing autocorrelation analysis...")
@@ -127,7 +127,6 @@ def main():
 
             st.write("Critical High Autocorrelation Variables:", critical_high_autocorrelation_vars)
             
-        
             # Apply differencing to critical variables
             st.write("Applying differencing to critical variables...")
             merged_data = apply_differencing(merged_data, critical_high_autocorrelation_vars)
@@ -159,34 +158,74 @@ def main():
         
         except KeyError as e:
             st.error(f"Error during stationarity and multicollinearity analysis: {e}")
+        '''
 
-        
         try:
+            #Prepare variables for regressions
+
+            # Apply differencing to some variables with high autocorrelation
+            variables_to_diff = ['new_vaccinations_smoothed', 'new_deaths_smoothed', 'new_cases_smoothed']
+            additional_vars = ['Dummy_Variable', 'vaccination_signal']  
+
+            st.write("Applying 'diff' to selected variables...")
+            for var in variables_to_diff:
+                if var in filtered_data.columns:
+                    filtered_data[f"{var}_diff"] = filtered_data[var].diff()
+                else:
+                    st.write(f"Warning: {var} not found in the data. Skipping.")
+
+            filtered_data = filtered_data.iloc[1:]  # Removes the first row affected by 'diff'
+
+            # Create new interaction terms: new_cases_smoothed_diff * Dummy_Variable and new_deaths_smoothed_diff * Dummy_Variable
+            filtered_data['new_cases_dummy_interaction'] = (
+                filtered_data['new_cases_smoothed_diff'] * filtered_data['Dummy_Variable']
+            )
+
+            filtered_data['new_deaths_dummy_interaction'] = (
+                filtered_data['new_deaths_smoothed_diff'] * filtered_data['Dummy_Variable']
+            )
+
+            # Prepare the full list of independent variables for regression
+            independent_vars_diff = [f"{var}_diff" for var in variables_to_diff]
+            independent_vars = independent_vars_diff + additional_vars + ['new_cases_dummy_interaction'] + ['new_deaths_dummy_interaction']
+
             # Perform multiple linear regression
             st.write("Performing Regression Analysis...")
             regression_model, r2_score = perform_multiple_linear_regression(
                 filtered_data,
                 dependent_var='daily_return',
-                independent_vars=['new_vaccinations_smoothed', 'new_deaths_smoothed', 'new_cases_smoothed', 'Dummy_Variable']
+                independent_vars=independent_vars
             )
 
             # Display regression results
             st.subheader("Regression Results")
+
+            # R² Score
             st.markdown(f"**R² Score:** {r2_score:.4f}")
-            st.markdown("**Coefficients:**")
-            st.table(pd.DataFrame({
+
+            # Coefficients Table
+            coefficients_df = pd.DataFrame({
                 'Feature': regression_model.feature_names_in_,
                 'Coefficient': regression_model.coef_
-            }))
-            st.markdown(f"**Intercept:** {regression_model.intercept_:.4f}")
+            }).sort_values(by='Coefficient', ascending=False)
+            st.markdown("**Coefficients:**")
+            st.table(coefficients_df)
 
-            # Plot regression results
-            plot_regression_results(
-                coefficients=regression_model.coef_,
-                intercept=regression_model.intercept_,
-                r2_score=r2_score,
-                feature_names=regression_model.feature_names_in_
+            # Plot Coefficients
+            st.markdown("**Feature Importance (Coefficients):**")
+            fig, ax = plt.subplots(figsize=(8, 6))
+            coefficients_df.plot.bar(
+                x='Feature', y='Coefficient', legend=False, ax=ax
             )
+            plt.title("Feature Importance (Coefficients)")
+            plt.ylabel("Coefficient Value")
+            plt.xlabel("Features")
+            plt.xticks(rotation=45, ha='right')
+            st.pyplot(fig)
+
+            # Intercept
+            st.markdown(f"**Intercept:** {regression_model.intercept_:.4f}")
+            
 
             # Event impact analysis
             st.write("Analyzing Event Impact...")
