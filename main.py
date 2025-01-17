@@ -161,6 +161,8 @@ def main():
         '''
 
         try:
+
+            #First linear regression
             #Prepare variables for regressions
 
             # Apply differencing to some variables with high autocorrelation
@@ -189,7 +191,7 @@ def main():
             independent_vars_diff = [f"{var}_diff" for var in variables_to_diff]
             independent_vars = independent_vars_diff + additional_vars + ['new_cases_dummy_interaction'] + ['new_deaths_dummy_interaction']
 
-            # Perform multiple linear regression
+            # Perform multiple linear regression  --> poor results
             st.write("Performing Regression Analysis...")
             regression_model, r2_score = perform_multiple_linear_regression(
                 filtered_data,
@@ -231,8 +233,7 @@ def main():
             #Prepare variables for regressions
 
             # Apply differencing to some variables with high autocorrelation
-            independent_vars = ['new_vaccinations_smoothed', 'new_deaths_smoothed', 'new_cases_smoothed', 'Dummy_Variable', 'vaccination_signal', 'volume']  
-
+            independent_vars = ['Dummy_Variable', 'vaccination_signal', 'reproduction_rate']  
 
             # Create new interaction terms: new_cases_smoothed_diff * Dummy_Variable and new_deaths_smoothed_diff * Dummy_Variable
             merged_data['new_cases_dummy_interaction'] = (
@@ -242,13 +243,18 @@ def main():
             merged_data['new_deaths_dummy_interaction'] = (
                 merged_data['new_deaths_smoothed'] * merged_data['Dummy_Variable']
             )
+     
+            merged_data['reproduction_rate_vaccinations'] = (merged_data['reproduction_rate'] * merged_data['vaccination_signal'])
 
-            merged_data['volume_stocks_dummy_interaction'] = (
-                merged_data['volume'] * merged_data['Dummy_Variable']
+            merged_data['deaths_to_cases_ratio'] = np.where(
+                merged_data['new_cases_smoothed'] == 0, 0,
+                merged_data['new_deaths_smoothed'] / merged_data['new_cases_smoothed']
             )
+            merged_data['interaction_term'] = merged_data['new_cases_smoothed'] * merged_data['Dummy_Variable']
+
 
             # Prepare the full list of independent variables for regression
-            independent_vars = independent_vars + ['new_cases_dummy_interaction'] + ['new_deaths_dummy_interaction'] + ['volume_stocks_dummy_interaction']
+            independent_vars = independent_vars + ['new_cases_dummy_interaction'] + ['new_deaths_dummy_interaction'] + ['reproduction_rate_vaccinations'] + ['interaction_term']
 
             # Perform multiple linear regression
             st.write("Performing Regression Analysis...")
@@ -287,69 +293,14 @@ def main():
             # Intercept
             st.markdown(f"**Intercept:** {regression_model.intercept_:.4f}")
 
+            # Event impact analysis
+            st.write("Analyzing Event Impact...")
+            event_impact = analyze_event_impact(filtered_data)
+            st.subheader("Event Impact on Stock Returns")
+            st.write(event_impact)
 
 
-            #THIRD LINEAR REGRESSION
-
-            #Prepare variables for regressions
-
-            # Apply differencing to some variables with high autocorrelation
-            independent_vars = ['new_vaccinations_smoothed', 'new_deaths_smoothed', 'new_cases_smoothed', 'Dummy_Variable']  
-
-
-            # Create new interaction terms: new_cases_smoothed_diff * Dummy_Variable and new_deaths_smoothed_diff * Dummy_Variable
-            merged_data['new_cases_dummy_interaction'] = (
-                merged_data['new_cases_smoothed'] * merged_data['Dummy_Variable']
-            )
-
-            merged_data['new_deaths_dummy_interaction'] = (
-                merged_data['new_deaths_smoothed'] * merged_data['Dummy_Variable']
-            )
-
-            # Prepare the full list of independent variables for regression
-            independent_vars = independent_vars + ['new_cases_dummy_interaction'] + ['new_deaths_dummy_interaction'] 
-
-            # Perform multiple linear regression
-            st.write("Performing Regression Analysis...")
-            regression_model, r2_score = perform_multiple_linear_regression(
-                merged_data,
-                dependent_var='daily_return',
-                independent_vars=independent_vars
-            )
-
-            # Display regression results
-            st.subheader("Regression Results")
-
-            # R² Score
-            st.markdown(f"**R² Score:** {r2_score:.4f}")
-
-            # Coefficients Table
-            coefficients_df = pd.DataFrame({
-                'Feature': regression_model.feature_names_in_,
-                'Coefficient': regression_model.coef_
-            }).sort_values(by='Coefficient', ascending=False)
-            st.markdown("**Coefficients:**")
-            st.table(coefficients_df)
-
-            # Plot Coefficients
-            st.markdown("**Feature Importance (Coefficients):**")
-            fig, ax = plt.subplots(figsize=(8, 6))
-            coefficients_df.plot.bar(
-                x='Feature', y='Coefficient', legend=False, ax=ax
-            )
-            plt.title("Feature Importance (Coefficients)")
-            plt.ylabel("Coefficient Value")
-            plt.xlabel("Features")
-            plt.xticks(rotation=45, ha='right')
-            st.pyplot(fig)
-
-            # Intercept
-            st.markdown(f"**Intercept:** {regression_model.intercept_:.4f}")
-
-
-
-
-            #Fourth LINEAR REGRESSION
+            #Third LINEAR REGRESSION: new dependent variable
 
             #Prepare variables for regressions
 
@@ -410,18 +361,6 @@ def main():
 
 
 
-
-
-
-
-
-
-
-            # Event impact analysis
-            st.write("Analyzing Event Impact...")
-            event_impact = analyze_event_impact(filtered_data)
-            st.subheader("Event Impact on Stock Returns")
-            st.write(event_impact)
 
             # Prepare binary target for logistic regression
             merged_data = prepare_binary_target(filtered_data, price_column='close') 
