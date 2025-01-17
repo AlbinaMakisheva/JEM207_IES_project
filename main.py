@@ -225,7 +225,197 @@ def main():
 
             # Intercept
             st.markdown(f"**Intercept:** {regression_model.intercept_:.4f}")
-            
+
+            #SECOND LINEAR REGRESSION
+
+            #Prepare variables for regressions
+
+            # Apply differencing to some variables with high autocorrelation
+            independent_vars = ['new_vaccinations_smoothed', 'new_deaths_smoothed', 'new_cases_smoothed', 'Dummy_Variable', 'vaccination_signal', 'volume']  
+
+
+            # Create new interaction terms: new_cases_smoothed_diff * Dummy_Variable and new_deaths_smoothed_diff * Dummy_Variable
+            merged_data['new_cases_dummy_interaction'] = (
+                merged_data['new_cases_smoothed'] * merged_data['Dummy_Variable']
+            )
+
+            merged_data['new_deaths_dummy_interaction'] = (
+                merged_data['new_deaths_smoothed'] * merged_data['Dummy_Variable']
+            )
+
+            merged_data['volume_stocks_dummy_interaction'] = (
+                merged_data['volume'] * merged_data['Dummy_Variable']
+            )
+
+            # Prepare the full list of independent variables for regression
+            independent_vars = independent_vars + ['new_cases_dummy_interaction'] + ['new_deaths_dummy_interaction'] + ['volume_stocks_dummy_interaction']
+
+            # Perform multiple linear regression
+            st.write("Performing Regression Analysis...")
+            regression_model, r2_score = perform_multiple_linear_regression(
+                merged_data,
+                dependent_var='daily_return',
+                independent_vars=independent_vars
+            )
+
+            # Display regression results
+            st.subheader("Regression Results")
+
+            # R² Score
+            st.markdown(f"**R² Score:** {r2_score:.4f}")
+
+            # Coefficients Table
+            coefficients_df = pd.DataFrame({
+                'Feature': regression_model.feature_names_in_,
+                'Coefficient': regression_model.coef_
+            }).sort_values(by='Coefficient', ascending=False)
+            st.markdown("**Coefficients:**")
+            st.table(coefficients_df)
+
+            # Plot Coefficients
+            st.markdown("**Feature Importance (Coefficients):**")
+            fig, ax = plt.subplots(figsize=(8, 6))
+            coefficients_df.plot.bar(
+                x='Feature', y='Coefficient', legend=False, ax=ax
+            )
+            plt.title("Feature Importance (Coefficients)")
+            plt.ylabel("Coefficient Value")
+            plt.xlabel("Features")
+            plt.xticks(rotation=45, ha='right')
+            st.pyplot(fig)
+
+            # Intercept
+            st.markdown(f"**Intercept:** {regression_model.intercept_:.4f}")
+
+
+
+            #THIRD LINEAR REGRESSION
+
+            #Prepare variables for regressions
+
+            # Apply differencing to some variables with high autocorrelation
+            independent_vars = ['new_vaccinations_smoothed', 'new_deaths_smoothed', 'new_cases_smoothed', 'Dummy_Variable']  
+
+
+            # Create new interaction terms: new_cases_smoothed_diff * Dummy_Variable and new_deaths_smoothed_diff * Dummy_Variable
+            merged_data['new_cases_dummy_interaction'] = (
+                merged_data['new_cases_smoothed'] * merged_data['Dummy_Variable']
+            )
+
+            merged_data['new_deaths_dummy_interaction'] = (
+                merged_data['new_deaths_smoothed'] * merged_data['Dummy_Variable']
+            )
+
+            # Prepare the full list of independent variables for regression
+            independent_vars = independent_vars + ['new_cases_dummy_interaction'] + ['new_deaths_dummy_interaction'] 
+
+            # Perform multiple linear regression
+            st.write("Performing Regression Analysis...")
+            regression_model, r2_score = perform_multiple_linear_regression(
+                merged_data,
+                dependent_var='daily_return',
+                independent_vars=independent_vars
+            )
+
+            # Display regression results
+            st.subheader("Regression Results")
+
+            # R² Score
+            st.markdown(f"**R² Score:** {r2_score:.4f}")
+
+            # Coefficients Table
+            coefficients_df = pd.DataFrame({
+                'Feature': regression_model.feature_names_in_,
+                'Coefficient': regression_model.coef_
+            }).sort_values(by='Coefficient', ascending=False)
+            st.markdown("**Coefficients:**")
+            st.table(coefficients_df)
+
+            # Plot Coefficients
+            st.markdown("**Feature Importance (Coefficients):**")
+            fig, ax = plt.subplots(figsize=(8, 6))
+            coefficients_df.plot.bar(
+                x='Feature', y='Coefficient', legend=False, ax=ax
+            )
+            plt.title("Feature Importance (Coefficients)")
+            plt.ylabel("Coefficient Value")
+            plt.xlabel("Features")
+            plt.xticks(rotation=45, ha='right')
+            st.pyplot(fig)
+
+            # Intercept
+            st.markdown(f"**Intercept:** {regression_model.intercept_:.4f}")
+
+
+
+
+            #Fourth LINEAR REGRESSION
+
+            #Prepare variables for regressions
+
+            # Apply differencing to some variables with high autocorrelation
+            independent_vars = ['new_cases_smoothed', 'Dummy_Variable', 'stringency_index'] 
+
+
+            # Create new interaction terms: new_cases_smoothed_diff * Dummy_Variable and new_deaths_smoothed_diff * Dummy_Variable
+            merged_data['new_cases_dummy_interaction'] = (
+                merged_data['new_cases_smoothed'] * merged_data['Dummy_Variable']
+            )
+
+            merged_data['total_vaccination_rate'] = (merged_data['total_vaccinations'] / merged_data['population'])
+
+            merged_data['total_smokers'] = merged_data['female_smokers'].fillna(0) + merged_data['male_smokers'].fillna(0)
+
+            merged_data['female_smokers_rate'] = (merged_data['female_smokers'] / merged_data['total_smokers'])
+
+
+            # Prepare the full list of independent variables for regression
+            independent_vars = independent_vars + ['new_cases_dummy_interaction'] + ['total_vaccination_rate'] + ['female_smokers_rate'] 
+            # Perform multiple linear regression
+            st.write("Performing Regression Analysis...")
+            regression_model, r2_score = perform_multiple_linear_regression(
+                merged_data,
+                dependent_var='new_deaths_smoothed',
+                independent_vars=independent_vars
+            )
+
+            # Display regression results
+            st.subheader("Regression Results")
+
+            # R² Score
+            st.markdown(f"**R² Score:** {r2_score:.4f}")
+
+            # Coefficients Table
+            coefficients_df = pd.DataFrame({
+                'Feature': regression_model.feature_names_in_,
+                'Coefficient': regression_model.coef_
+            }).sort_values(by='Coefficient', ascending=False)
+            st.markdown("**Coefficients:**")
+            st.table(coefficients_df)
+
+            # Plot Coefficients
+            st.markdown("**Feature Importance (Coefficients):**")
+            fig, ax = plt.subplots(figsize=(8, 6))
+            coefficients_df.plot.bar(
+                x='Feature', y='Coefficient', legend=False, ax=ax
+            )
+            plt.title("Feature Importance (Coefficients)")
+            plt.ylabel("Coefficient Value")
+            plt.xlabel("Features")
+            plt.xticks(rotation=45, ha='right')
+            st.pyplot(fig)
+
+            # Intercept
+            st.markdown(f"**Intercept:** {regression_model.intercept_:.4f}")
+
+
+
+
+
+
+
+
+
 
             # Event impact analysis
             st.write("Analyzing Event Impact...")
