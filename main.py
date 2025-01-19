@@ -161,24 +161,40 @@ def main():
         '''
 
         try:
+            # First Linear Regression
+            st.header("First Linear Regression")
 
-            #First linear regression
-            #Prepare variables for regressions
+            # Apply differencing and lagging to selected variables
+            reg1_vars_short_lag = ['new_cases_smoothed', 'new_deaths_smoothed']
+            reg1_vars_long_lag = ['vaccination_signal', 'reproduction_rate', 'new_vaccinations_smoothed', 'Dummy_Variable']
 
-            # Apply differencing to some variables with high autocorrelation
-            reg1_diff_vars = ['new_vaccinations_smoothed', 'new_deaths_smoothed', 'new_cases_smoothed']
-            additional_vars = ['Dummy_Variable', 'vaccination_signal']  
+            st.write("Applying differencing and lagging to selected variables...")
+            short_lags = [7]  # Only 7 days for short-term
+            long_lags = [180]  # Only 180 days for long-term
 
-            st.write("Applying 'diff' to selected variables...")
-            for var in reg1_diff_vars:
+            # Apply differencing and short lags to short-term variables
+            for var in reg1_vars_short_lag:
                 if var in filtered_data.columns:
-                    filtered_data[f"{var}_diff"] = filtered_data[var].diff()
+                    diff_var = f"{var}_diff"
+                    filtered_data[diff_var] = filtered_data[var].diff()
+                    for lag in short_lags:
+                        filtered_data[f"{diff_var}_lag_{lag}"] = filtered_data[diff_var].shift(lag)
                 else:
                     st.write(f"Warning: {var} not found in the data. Skipping.")
 
-            filtered_data = filtered_data.iloc[1:]  # Removes the first row affected by 'diff'
+            # Apply differencing and long lags to long-term variables
+            for var in reg1_vars_long_lag:
+                if var in filtered_data.columns:
+                    diff_var = f"{var}_diff"
+                    filtered_data[diff_var] = filtered_data[var].diff()
+                    for lag in long_lags:
+                        filtered_data[f"{diff_var}_lag_{lag}"] = filtered_data[diff_var].shift(lag)
+                else:
+                    st.write(f"Warning: {var} not found in the data. Skipping.")
 
-            # Create new interaction terms: new_cases_smoothed_diff * Dummy_Variable and new_deaths_smoothed_diff * Dummy_Variable
+            filtered_data = filtered_data.iloc[1:]  # Removes the first row affected by differencing
+
+            # Create interaction terms
             filtered_data['new_cases_dummy_interaction'] = (
                 filtered_data['new_cases_smoothed_diff'] * filtered_data['Dummy_Variable']
             )
@@ -187,64 +203,25 @@ def main():
                 filtered_data['new_deaths_smoothed_diff'] * filtered_data['Dummy_Variable']
             )
 
-            #Adding lag variables
-
-            st.header("Add Lag Variables")
-            st.write("""
-                Given the high correlation in most of our variables and the caracteristics of our analysis, we decided to create lag variables. Lag variables account for the time delay between a predictor variable and its effect on the dependent variable (stock returns). We believe that this is highly relevant for variables like vaccinations that take time to impact COVID-19 metrics which in turn may influence Pfizer's stock performance. For highly autocorrelated variables, their lagged values might add predictive power.
-
-                Given this, we also decided to separate the variables to account for the time it would take to impact the outcome. Long lags (3-6 months) might be helpful for variables like gdp_per_capita, stringency_index, vaccination rates, or vaccination signals, as their effects are often gradual. Variables like new_cases and new_deaths typically have shorter lags (e.g., 1–2 weeks) since the market reacts quickly to changes in pandemic severity.
-            """)
-
-            # Define variables and lag periods
-            reg1_lag_short = ['new_cases_smoothed_diff', 'new_deaths_smoothed_diff']
-            reg1_lag_long = ['vaccination_signal', 'reproduction_rate', 'new_vaccinations_smoothed_diff', 'Dummy_Variable']
-    
-            short_lags = [1, 7]  # Days
-            long_lags = [30, 180]  # 1 month and 6 months
-
-            # Create lagged variables
-            for var in reg1_lag_short:
-                for lag in short_lags:
-                    filtered_data[f'{var}_lag_{lag}'] = filtered_data[var].shift(lag)
-
-            for var in reg1_lag_long:
-                for lag in long_lags:
-                    filtered_data[f'{var}_lag_{lag}'] = filtered_data[var].shift(lag)
-
-            # Prepare the full list of independent variables for regression
-            independent_vars_diff = [f"{var}_diff" for var in variables_to_diff]
-            independent_vars_short_lags = [f'{var}_lag_{lag}' for var in short_lag_vars for lag in short_lags]
-            independent_vars_long_lags = [f'{var}_lag_{lag}' for var in long_lag_vars for lag in long_lags]
-
             reg1_independent_vars = (
-                independent_vars_diff +
-                additional_vars +
-                independent_vars_short_lags +
-                independent_vars_long_lags +
+                [f"{var}_diff_lag_{lag}" for var in reg1_vars_short_lag for lag in short_lags] +
+                [f"{var}_diff_lag_{lag}" for var in reg1_vars_long_lag for lag in long_lags] +
                 ['new_cases_dummy_interaction', 'new_deaths_dummy_interaction']
             )
 
-            # Perform multiple linear regression  --> poor results
-            st.write("Performing Regression Analysis...")
+            # Perform regression
             regression_model, r2_score = perform_multiple_linear_regression(
                 filtered_data,
                 dependent_var='daily_return',
                 independent_vars=reg1_independent_vars
             )
 
-            # Display regression results
-            st.subheader("Regression Results")
-
-            # R² Score
+            st.subheader("First Regression Results")
             st.markdown(f"**R² Score:** {r2_score:.4f}")
-
-            # Coefficients Table
             coefficients_df = pd.DataFrame({
                 'Feature': regression_model.feature_names_in_,
                 'Coefficient': regression_model.coef_
             }).sort_values(by='Coefficient', ascending=False)
-            st.markdown("**Coefficients:**")
             st.table(coefficients_df)
 
             # Plot Coefficients
@@ -262,75 +239,66 @@ def main():
             # Intercept
             st.markdown(f"**Intercept:** {regression_model.intercept_:.4f}")
 
-            #SECOND LINEAR REGRESSION
+            # Second Linear Regression
+            st.header("Second Linear Regression")
 
-            #Prepare variables for regressions
-
-            # Create new interaction terms: new_cases_smoothed_diff * Dummy_Variable and new_deaths_smoothed_diff * Dummy_Variable
+            # Create additional interaction terms
             filtered_data['new_cases_dummy_interaction'] = (
                 filtered_data['new_cases_smoothed'] * filtered_data['Dummy_Variable']
             )
 
-            filtered_data['new_deaths_dummy_interaction'] = (
-                filtered_data['new_deaths_smoothed'] * filtered_data['Dummy_Variable']
+            filtered_data['reproduction_rate_vaccinations'] = (
+                filtered_data['reproduction_rate'] * filtered_data['vaccination_signal']
             )
-     
-            filtered_data['reproduction_rate_vaccinations'] = (filtered_data['reproduction_rate'] * filtered_data['vaccination_signal'])
 
             filtered_data['deaths_to_cases_ratio'] = np.where(
                 filtered_data['new_cases_smoothed'] == 0, 0,
                 filtered_data['new_deaths_smoothed'] / filtered_data['new_cases_smoothed']
             )
+
+            filtered_data['new_deaths_dummy_interaction'] = (
+                filtered_data['new_deaths_smoothed'] * filtered_data['Dummy_Variable']
+            )
+
             filtered_data['interaction_term'] = filtered_data['new_cases_smoothed'] * filtered_data['Dummy_Variable']
 
-            # Apply differencing to some variables with high autocorrelation
-            reg2_diff_vars = ['new_cases_smoothed', 'new_deaths_smoothed', 'Dummy_Variable']
-            reg2_lag_short = ['reproduction_rate_vaccinations']
-            reg2_lag_long = ['vaccination_signal']
+            reg2_vars_short_lag = ['reproduction_rate_vaccinations']
+            reg2_vars_long_lag = ['vaccination_signal', 'Dummy_Variable']
 
-            
-            for var in reg2_diff_vars:
+            # Apply differencing and short lags to short-term variables
+            for var in reg2_vars_short_lag:
                 if var in filtered_data.columns:
-                    filtered_data[f"{var}_diff"] = filtered_data[var].diff()
+                    for lag in short_lags:
+                        filtered_data[f"{var}_lag_{lag}"] = filtered_data[var].shift(lag)
                 else:
                     st.write(f"Warning: {var} not found in the data. Skipping.")
 
-            for var in reg2_lag_short:
-                for lag in short_lags:
-                    filtered_data[f'{var}_lag_{lag}'] = filtered_data[var].shift(lag)
-
-            for var in reg2_lag_long:
-                for lag in long_lags:
-                    filtered_data[f'{var}_lag_{lag}'] = filtered_data[var].shift(lag)
+            # Apply differencing and long lags to long-term variables
+            for var in reg2_vars_long_lag:
+                if var in filtered_data.columns:
+                    for lag in long_lags:
+                        filtered_data[f"{var}_lag_{lag}"] = filtered_data[var].shift(lag)
+                else:
+                    st.write(f"Warning: {var} not found in the data. Skipping.")
 
             reg2_independent_vars = (
-                [f"{var}_diff" for var in reg2_diff_vars] +
-                [f"{var}_lag_{lag}" for var in reg2_lag_short for lag in short_lags] +
-                [f"{var}_lag_{lag}" for var in reg2_lag_long for lag in long_lags] +
+                [f"{var}_lag_{lag}" for var in reg2_vars_short_lag for lag in short_lags] +
+                [f"{var}_lag_{lag}" for var in reg2_vars_long_lag for lag in long_lags] +
                 ['deaths_to_cases_ratio', 'new_cases_dummy_interaction', 'new_deaths_dummy_interaction', 'interaction_term']
             )
 
-
-            # Perform multiple linear regression
-            st.write("Performing Regression Analysis...")
             regression_model, r2_score = perform_multiple_linear_regression(
                 filtered_data,
                 dependent_var='daily_return',
                 independent_vars=reg2_independent_vars
             )
 
-            # Display regression results
-            st.subheader("Regression Results")
-
-            # R² Score
+            st.subheader("Second Regression Results")
             st.markdown(f"**R² Score:** {r2_score:.4f}")
-
-            # Coefficients Table
             coefficients_df = pd.DataFrame({
                 'Feature': regression_model.feature_names_in_,
                 'Coefficient': regression_model.coef_
             }).sort_values(by='Coefficient', ascending=False)
-            st.markdown("**Coefficients:**")
             st.table(coefficients_df)
 
             # Plot Coefficients
@@ -348,16 +316,12 @@ def main():
             # Intercept
             st.markdown(f"**Intercept:** {regression_model.intercept_:.4f}")
 
-            # Event impact analysis
-            st.write("Analyzing Event Impact...")
-            event_impact = analyze_event_impact(filtered_data)
-            st.subheader("Event Impact on Stock Returns")
-            st.write(event_impact)
 
+            # Third Linear Regression
+            st.header("Third Linear Regression")
 
-            #Third LINEAR REGRESSION: new dependent variable
+            independent_vars = ['new_cases_smoothed', 'Dummy_Variable', 'stringency_index'] 
 
-            #Prepare variables for regressions
 
             # Create new interaction terms: 
             filtered_data['new_cases_dummy_interaction'] = (
@@ -366,41 +330,19 @@ def main():
 
             filtered_data['total_vaccination_rate'] = (filtered_data['total_vaccinations'] / filtered_data['population'])
 
-            filtered_data['total_smokers'] = filtered_data['female_smokers'].fillna(0) + filtered_data['male_smokers'].fillna(0)
+            filtered_data['total_smokers'] = filtered_data['female_smokers'].fillna(0) + merged_data['male_smokers'].fillna(0)
 
             filtered_data['female_smokers_rate'] = (filtered_data['female_smokers'] / filtered_data['total_smokers'])
 
-            reg3_diff_vars = ['new_cases_smoothed', 'stringency_index', 'Dummy_Variable']
-            reg3_lag_short = ['new_cases_smoothed_diff']
-            reg3_lag_long = ['total_vaccination_rate']
 
-            for var in reg3_diff_vars:
-                if var in filtered_data.columns:
-                    filtered_data[f"{var}_diff"] = filtered_data[var].diff()
-                else:
-                    st.write(f"Warning: {var} not found in the data. Skipping.")
-
-            for var in reg3_lag_short:
-                for lag in short_lags:
-                    filtered_data[f'{var}_lag_{lag}'] = filtered_data[var].shift(lag)
-
-            for var in reg3_lag_long:
-                for lag in long_lags:
-                    filtered_data[f'{var}_lag_{lag}'] = filtered_data[var].shift(lag)
-
-            reg3_independent_vars = (
-                [f"{var}_diff" for var in reg3_diff_vars] +
-                [f"{var}_lag_{lag}" for var in reg3_lag_short for lag in short_lags] +
-                [f"{var}_lag_{lag}" for var in reg3_lag_long for lag in long_lags] +
-                ['total_vaccination_rate', 'female_smokers_rate', 'new_cases_dummy_interaction']
-            )
-
+            # Prepare the full list of independent variables for regression
+            independent_vars = independent_vars + ['new_cases_dummy_interaction'] + ['total_vaccination_rate'] + ['female_smokers_rate'] 
             # Perform multiple linear regression
             st.write("Performing Regression Analysis...")
             regression_model, r2_score = perform_multiple_linear_regression(
                 filtered_data,
                 dependent_var='new_deaths_smoothed',
-                independent_vars=reg3_independent_vars
+                independent_vars=independent_vars
             )
 
             # Display regression results
@@ -433,6 +375,8 @@ def main():
             st.markdown(f"**Intercept:** {regression_model.intercept_:.4f}")
 
 
+        except Exception as e:
+            st.error(f"An error occurred: {e}")
 
 
             # Prepare binary target for logistic regression
