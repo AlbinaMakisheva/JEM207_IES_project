@@ -78,7 +78,6 @@ def main():
         window_size = st.slider("Select window size around events (in months)", 1, 12, 3)
         filtered_data = filter_data_around_events(merged_data, events, window_months=window_size)
 
-    
         try:
             # Perform autocorrelation analysis
             st.write("Performing autocorrelation analysis...")
@@ -127,7 +126,6 @@ def main():
 
             st.write("Critical High Autocorrelation Variables:", critical_high_autocorrelation_vars)
             
-        
             # Apply differencing to critical variables
             st.write("Applying differencing to critical variables...")
             merged_data = apply_differencing(merged_data, critical_high_autocorrelation_vars)
@@ -160,44 +158,379 @@ def main():
         except KeyError as e:
             st.error(f"Error during stationarity and multicollinearity analysis: {e}")
 
-        
+
         try:
+            # First Linear Regression
+            st.header("First Linear Regression")
+
+            # Apply differencing and lagging to selected variables
+            reg1_vars_short_lag = ['new_cases_smoothed', 'new_deaths_smoothed']
+            reg1_vars_long_lag = ['vaccination_signal', 'reproduction_rate', 'new_vaccinations_smoothed', 'Dummy_Variable']
+
+            st.write("Applying differencing and lagging to selected variables...")
+            short_lags = [1]  # Only 1 day for short-term
+            long_lags = [180]  # Only 180 days for long-term
+
+            # Apply differencing and short lags to short-term variables
+            for var in reg1_vars_short_lag:
+                if var in filtered_data.columns:
+                    diff_var = f"{var}_diff"
+                    filtered_data[diff_var] = filtered_data[var].diff()
+                    for lag in short_lags:
+                        filtered_data[f"{diff_var}_lag_{lag}"] = filtered_data[diff_var].shift(lag)
+                else:
+                    st.write(f"Warning: {var} not found in the data. Skipping.")
+
+            # Apply differencing and long lags to long-term variables
+            for var in reg1_vars_long_lag:
+                if var in filtered_data.columns:
+                    diff_var = f"{var}_diff"
+                    filtered_data[diff_var] = filtered_data[var].diff()
+                    for lag in long_lags:
+                        filtered_data[f"{diff_var}_lag_{lag}"] = filtered_data[diff_var].shift(lag)
+                else:
+                    st.write(f"Warning: {var} not found in the data. Skipping.")
+
+            filtered_data = filtered_data.iloc[1:]  # Removes the first row affected by differencing
+
+            # Create interaction terms
+            filtered_data['new_cases_dummy_interaction'] = (
+                filtered_data['new_cases_smoothed_diff'] * filtered_data['Dummy_Variable']
+            )
+
+            filtered_data['new_deaths_dummy_interaction'] = (
+                filtered_data['new_deaths_smoothed_diff'] * filtered_data['Dummy_Variable']
+            )
+
+            reg1_independent_vars = (
+                [f"{var}_diff_lag_{lag}" for var in reg1_vars_short_lag for lag in short_lags] +
+                [f"{var}_diff_lag_{lag}" for var in reg1_vars_long_lag for lag in long_lags] +
+                ['new_cases_dummy_interaction', 'new_deaths_dummy_interaction']
+            )
+
+            # Perform regression
+            regression_model, r2_score = perform_multiple_linear_regression(
+                filtered_data,
+                dependent_var='daily_return',
+                independent_vars=reg1_independent_vars
+            )
+
+            st.subheader("First Regression Results")
+            st.markdown(f"**R² Score:** {r2_score:.4f}")
+            coefficients_df = pd.DataFrame({
+                'Feature': regression_model.feature_names_in_,
+                'Coefficient': regression_model.coef_
+            }).sort_values(by='Coefficient', ascending=False)
+            st.table(coefficients_df)
+
+            # Plot Coefficients
+            st.markdown("**Feature Importance (Coefficients):**")
+            fig, ax = plt.subplots(figsize=(8, 6))
+            coefficients_df.plot.bar(
+                x='Feature', y='Coefficient', legend=False, ax=ax
+            )
+            plt.title("Feature Importance (Coefficients)")
+            plt.ylabel("Coefficient Value")
+            plt.xlabel("Features")
+            plt.xticks(rotation=45, ha='right')
+            st.pyplot(fig)
+
+            # Intercept
+            st.markdown(f"**Intercept:** {regression_model.intercept_:.4f}")
+
+            # Second Linear Regression
+            st.header("Second Linear Regression")
+
+            # Create additional interaction terms
+            filtered_data['new_cases_dummy_interaction'] = (
+                filtered_data['new_cases_smoothed'] * filtered_data['Dummy_Variable']
+            )
+
+            filtered_data['reproduction_rate_vaccinations'] = (
+                filtered_data['reproduction_rate'] * filtered_data['vaccination_signal']
+            )
+
+            filtered_data['deaths_to_cases_ratio'] = np.where(
+                filtered_data['new_cases_smoothed'] == 0, 0,
+                filtered_data['new_deaths_smoothed'] / filtered_data['new_cases_smoothed']
+            )
+
+            filtered_data['new_deaths_dummy_interaction'] = (
+                filtered_data['new_deaths_smoothed'] * filtered_data['Dummy_Variable']
+            )
+
+
+            reg2_vars_short_lag = ['reproduction_rate_vaccinations']
+            reg2_vars_long_lag = ['vaccination_signal', 'Dummy_Variable']
+
+            # Apply differencing and short lags to short-term variables
+            for var in reg2_vars_short_lag:
+                if var in filtered_data.columns:
+                    for lag in short_lags:
+                        filtered_data[f"{var}_lag_{lag}"] = filtered_data[var].shift(lag)
+                else:
+                    st.write(f"Warning: {var} not found in the data. Skipping.")
+
+            # Apply differencing and long lags to long-term variables
+            for var in reg2_vars_long_lag:
+                if var in filtered_data.columns:
+                    for lag in long_lags:
+                        filtered_data[f"{var}_lag_{lag}"] = filtered_data[var].shift(lag)
+                else:
+                    st.write(f"Warning: {var} not found in the data. Skipping.")
+
+            reg2_independent_vars = (
+                [f"{var}_lag_{lag}" for var in reg2_vars_short_lag for lag in short_lags] +
+                [f"{var}_lag_{lag}" for var in reg2_vars_long_lag for lag in long_lags] +
+                ['deaths_to_cases_ratio', 'new_cases_dummy_interaction', 'new_deaths_dummy_interaction']
+            )
+
+            regression_model, r2_score = perform_multiple_linear_regression(
+                filtered_data,
+                dependent_var='daily_return',
+                independent_vars=reg2_independent_vars
+            )
+
+            st.subheader("Second Regression Results")
+            st.markdown(f"**R² Score:** {r2_score:.4f}")
+            coefficients_df = pd.DataFrame({
+                'Feature': regression_model.feature_names_in_,
+                'Coefficient': regression_model.coef_
+            }).sort_values(by='Coefficient', ascending=False)
+            st.table(coefficients_df)
+
+            # Plot Coefficients
+            st.markdown("**Feature Importance (Coefficients):**")
+            fig, ax = plt.subplots(figsize=(8, 6))
+            coefficients_df.plot.bar(
+                x='Feature', y='Coefficient', legend=False, ax=ax
+            )
+            plt.title("Feature Importance (Coefficients)")
+            plt.ylabel("Coefficient Value")
+            plt.xlabel("Features")
+            plt.xticks(rotation=45, ha='right')
+            st.pyplot(fig)
+
+            # Intercept
+            st.markdown(f"**Intercept:** {regression_model.intercept_:.4f}")
+
+
+            # Third Linear Regression
+            st.header("Third Linear Regression")
+
+            independent_vars = ['new_cases_smoothed', 'Dummy_Variable', 'stringency_index'] 
+
+
+            # Create new interaction terms: 
+            filtered_data['new_cases_dummy_interaction'] = (
+                filtered_data['new_cases_smoothed'] * filtered_data['Dummy_Variable']
+            )
+
+            filtered_data['total_vaccination_rate'] = (filtered_data['total_vaccinations'] / filtered_data['population'])
+
+            filtered_data['total_smokers'] = filtered_data['female_smokers'].fillna(0) + merged_data['male_smokers'].fillna(0)
+
+            filtered_data['female_smokers_rate'] = (filtered_data['female_smokers'] / filtered_data['total_smokers'])
+
+
+            # Prepare the full list of independent variables for regression
+            independent_vars = independent_vars + ['new_cases_dummy_interaction'] + ['total_vaccination_rate'] + ['female_smokers_rate'] 
             # Perform multiple linear regression
             st.write("Performing Regression Analysis...")
             regression_model, r2_score = perform_multiple_linear_regression(
                 filtered_data,
-                dependent_var='daily_return',
-                independent_vars=['new_vaccinations_smoothed', 'new_deaths_smoothed', 'new_cases_smoothed', 'Dummy_Variable']
+                dependent_var='new_deaths_smoothed',
+                independent_vars=independent_vars
             )
 
             # Display regression results
             st.subheader("Regression Results")
+
+            # R² Score
             st.markdown(f"**R² Score:** {r2_score:.4f}")
-            st.markdown("**Coefficients:**")
-            st.table(pd.DataFrame({
+
+            # Coefficients Table
+            coefficients_df = pd.DataFrame({
                 'Feature': regression_model.feature_names_in_,
                 'Coefficient': regression_model.coef_
-            }))
+            }).sort_values(by='Coefficient', ascending=False)
+            st.markdown("**Coefficients:**")
+            st.table(coefficients_df)
+
+            # Plot Coefficients
+            st.markdown("**Feature Importance (Coefficients):**")
+            fig, ax = plt.subplots(figsize=(8, 6))
+            coefficients_df.plot.bar(
+                x='Feature', y='Coefficient', legend=False, ax=ax
+            )
+            plt.title("Feature Importance (Coefficients)")
+            plt.ylabel("Coefficient Value")
+            plt.xlabel("Features")
+            plt.xticks(rotation=45, ha='right')
+            st.pyplot(fig)
+
+            # Intercept
             st.markdown(f"**Intercept:** {regression_model.intercept_:.4f}")
 
-            # Plot regression results
-            plot_regression_results(
-                coefficients=regression_model.coef_,
-                intercept=regression_model.intercept_,
-                r2_score=r2_score,
-                feature_names=regression_model.feature_names_in_
-            )
 
-            # Event impact analysis
-            st.write("Analyzing Event Impact...")
-            event_impact = analyze_event_impact(filtered_data)
-            st.subheader("Event Impact on Stock Returns")
-            st.write(event_impact)
+        except Exception as e:
+            st.error(f"An error occurred: {e}")
+
+        try: 
 
             # Prepare binary target for logistic regression
             merged_data = prepare_binary_target(filtered_data, price_column='close') 
             independent_vars = ['new_vaccinations_smoothed', 'new_deaths_smoothed', 'new_cases_smoothed', 'Dummy_Variable']
 
+            # Perform logistic regression with additional features
+            st.write("Performing Logistic Regression with Extended Variables...")
+            
+            # Add new features to the dataset
+            merged_data['deaths_to_cases_ratio'] = np.where(
+                merged_data['new_cases_smoothed'] == 0, 0,
+                merged_data['new_deaths_smoothed'] / merged_data['new_cases_smoothed']
+            )
+            merged_data['interaction_term'] = merged_data['new_cases_smoothed'] * merged_data['Dummy_Variable']
+
+
+            # Define the extended independent variables
+            extended_independent_vars = independent_vars + ['deaths_to_cases_ratio', 'interaction_term']
+
+            # Handle missing or infinite values in the extended variables
+            merged_data[extended_independent_vars + ['target']] = merged_data[extended_independent_vars + ['target']].replace(
+                [np.inf, -np.inf], np.nan).fillna(0)  
+
+            # Ensure no extreme values exist
+            for col in extended_independent_vars:
+                merged_data[col] = np.clip(merged_data[col], a_min=-1e6, a_max=1e6)
+
+            # Standardize the independent variables
+            scaler = StandardScaler()
+            scaled_extended_vars = scaler.fit_transform(merged_data[extended_independent_vars])
+
+            # Perform extended logistic regression
+        
+            extended_logistic_model, X_test, y_test = perform_extended_logistic_regression(merged_data, extended_independent_vars, target_var='target')
+
+            # Display results extended logistic regression
+            st.subheader("Extended Logistic Regression Results")
+            st.markdown("**Model Coefficients:**")
+            extended_coef_df = pd.DataFrame({
+                'Feature': extended_independent_vars,
+                'Coefficient': extended_logistic_model.coef_[0]
+            })
+            st.table(extended_coef_df)
+
+            st.markdown(f"**Intercept:** {extended_logistic_model.intercept_}")
+
+            extended_y_pred = extended_logistic_model.predict(scaled_extended_vars)
+            extended_accuracy = accuracy_score(merged_data['target'], extended_y_pred)
+            st.markdown(f"**Accuracy on Test Data:** {extended_accuracy:.4f}")
+
+            # Classification report for extended logistic regression
+            from sklearn.metrics import classification_report
+            extended_report = classification_report(y_test, extended_logistic_model.predict(X_test), output_dict=True, zero_division=0)
+            extended_report_df = pd.DataFrame(extended_report).transpose()
+            st.markdown("**Classification Report (Extended):**")
+            st.table(extended_report_df)
+
+            st.markdown("### Model Performance Plots")
+
+            # Calculate ROC Curve
+            from sklearn.metrics import roc_curve, auc
+
+            if extended_logistic_model.classes_.shape[0] > 1:
+                y_proba = extended_logistic_model.predict_proba(X_test)[:, 1]
+            else:
+                st.error("ROC Curve cannot be computed: Model outputs only one class.")
+            fpr, tpr, _ = roc_curve(y_test, y_proba)
+            roc_auc = auc(fpr, tpr)
+
+            st.write(f"**ROC AUC:** {roc_auc:.4f}")
+
+            # Plot ROC Curve
+            fig, ax = plt.subplots()
+            ax.plot(fpr, tpr, color='darkorange', lw=2, label='ROC curve (area = %0.2f)' % roc_auc)
+            ax.plot([0, 1], [0, 1], color='navy', lw=2, linestyle='--')
+            ax.set_xlim([0.0, 1.0])
+            ax.set_ylim([0.0, 1.05])
+            ax.set_xlabel('False Positive Rate')
+            ax.set_ylabel('True Positive Rate')
+            ax.set_title('Extended Logistic Regression ROC Curve')
+            ax.legend(loc='lower right')
+            st.pyplot(fig)
+
+            # Perform Random Forest classification
+            st.write("Performing Random Forest Classification...")
+            rf_model_2 = perform_random_forest(merged_data, extended_independent_vars)
+
+            # Display the feature importance
+            feature_importance = pd.DataFrame({
+                'Feature': extended_independent_vars,  
+                'Importance': rf_model_2.feature_importances_
+            })
+            st.subheader("Random Forest Feature Importance")
+            st.table(feature_importance)
+
+            # Plot the feature importance
+            feature_importance.plot(kind='barh', x='Feature', y='Importance', legend=False)
+            plt.title('Random Forest Feature Importance')
+            plt.xlabel('Importance')
+            plt.ylabel('Feature')
+            plt.show()
+
+            feature_importance.plot(kind='barh', x='Feature', y='Importance')
+            st.pyplot(plt)
+
+            # Perform logistic regression with additional features with diff-lag
+            st.write("Performing Logistic Regression with Extended Variables applying diff and lag...")
+
+            # Define short lag and long lag variables
+            vars_short_lag = ['new_cases_smoothed', 'new_deaths_smoothed']
+            vars_long_lag = ['new_vaccinations_smoothed', 'Dummy_Variable']
+
+            # Define lag periods
+            short_lags = [1]  # 1-week lag
+            long_lags = [180]  # 6-month lag
+
+            # Apply short lags to short-term variables
+            for var in vars_short_lag:
+                if var in merged_data.columns:
+                    diff_var = f"{var}_diff"
+                    merged_data[diff_var] = merged_data[var].diff()
+                    for lag in short_lags:
+                        merged_data[f"{diff_var}_lag_{lag}"] = merged_data[diff_var].shift(lag)
+                else:
+                    st.write(f"Warning: {var} not found in the data. Skipping.")
+
+            # Apply long lags to long-term variables
+            for var in vars_long_lag:
+                if var in merged_data.columns:
+                    diff_var = f"{var}_diff"
+                    merged_data[diff_var] = merged_data[var].diff()
+                    for lag in long_lags:
+                        merged_data[f"{diff_var}_lag_{lag}"] = merged_data[diff_var].shift(lag)
+                else:
+                    st.write(f"Warning: {var} not found in the data. Skipping.")
+
+            # Define independent variables using only differenced and lagged versions
+            independent_vars = (
+                [f"{var}_diff_lag_{lag}" for var in vars_short_lag for lag in short_lags] +
+                [f"{var}_diff_lag_{lag}" for var in vars_long_lag for lag in long_lags]
+            )
+
+            # Add additional features
+            merged_data['deaths_to_cases_ratio'] = np.where(
+                merged_data['new_cases_smoothed'] == 0, 0,
+                merged_data['new_deaths_smoothed'] / merged_data['new_cases_smoothed']
+            )
+            merged_data['interaction_term'] = merged_data['new_cases_smoothed'] * merged_data['Dummy_Variable']
+            additional_features = ['deaths_to_cases_ratio', 'interaction_term']
+
+            # Add additional features to independent variables
+            independent_vars += additional_features
+
+            # Drop rows with NaN values after differencing and lagging
             merged_data = merged_data.dropna(subset=independent_vars + ['target'])
 
             # Perform logistic regression
@@ -264,108 +597,10 @@ def main():
             feature_importance.plot(kind='barh', x='Feature', y='Importance')
             st.pyplot(plt)
 
-            # Perform logistic regression with additional features
-            st.write("Performing Logistic Regression with Extended Variables...")
-            
-            # Add new features to the dataset
-            merged_data['deaths_to_cases_ratio'] = np.where(
-                merged_data['new_cases_smoothed'] == 0, 0,
-                merged_data['new_deaths_smoothed'] / merged_data['new_cases_smoothed']
-            )
-            merged_data['interaction_term'] = merged_data['new_cases_smoothed'] * merged_data['Dummy_Variable']
 
 
-            # Define the extended independent variables
-            extended_independent_vars = independent_vars + ['deaths_to_cases_ratio', 'interaction_term']
-
-            merged_data[extended_independent_vars] = merged_data[extended_independent_vars].replace([np.inf, -np.inf], np.nan).fillna(0)
-
-            # Handle missing or infinite values in the extended variables
-            merged_data[extended_independent_vars + ['target']] = merged_data[extended_independent_vars + ['target']].replace(
-                [np.inf, -np.inf], np.nan).fillna(0)  
-
-            # Ensure no extreme values exist
-            for col in extended_independent_vars:
-                merged_data[col] = np.clip(merged_data[col], a_min=-1e6, a_max=1e6)
-
-            # Standardize the independent variables
-            scaler = StandardScaler()
-            scaled_extended_vars = scaler.fit_transform(merged_data[extended_independent_vars])
-
-            # Perform extended logistic regression
-        
-            extended_logistic_model, X_test, y_test = perform_extended_logistic_regression(merged_data, extended_independent_vars, target_var='target')
-
-            # Display results extended logistic regression
-            st.subheader("Extended Logistic Regression Results")
-            st.markdown("**Model Coefficients:**")
-            extended_coef_df = pd.DataFrame({
-                'Feature': extended_independent_vars,
-                'Coefficient': extended_logistic_model.coef_[0]
-            })
-            st.table(extended_coef_df)
-
-            st.markdown(f"**Intercept:** {extended_logistic_model.intercept_}")
-
-            extended_y_pred = extended_logistic_model.predict(scaled_extended_vars)
-            extended_accuracy = accuracy_score(merged_data['target'], extended_y_pred)
-            st.markdown(f"**Accuracy on Test Data:** {extended_accuracy:.4f}")
-
-            # Classification report for extended logistic regression
-
-            extended_report = classification_report(y_test, extended_logistic_model.predict(X_test), output_dict=True, zero_division=0)
-            extended_report_df = pd.DataFrame(extended_report).transpose()
-            st.markdown("**Classification Report (Extended):**")
-            st.table(extended_report_df)
-
-            st.markdown("### Model Performance Plots")
-
-            # Calculate ROC Curve
-            if extended_logistic_model.classes_.shape[0] > 1:
-                y_proba = extended_logistic_model.predict_proba(X_test)[:, 1]
-            else:
-                st.error("ROC Curve cannot be computed: Model outputs only one class.")
-            fpr, tpr, _ = roc_curve(y_test, y_proba)
-            roc_auc = auc(fpr, tpr)
-
-            st.write(f"**ROC AUC:** {roc_auc:.4f}")
-
-            # Plot ROC Curve
-            fig, ax = plt.subplots()
-            ax.plot(fpr, tpr, color='darkorange', lw=2, label='ROC curve (area = %0.2f)' % roc_auc)
-            ax.plot([0, 1], [0, 1], color='navy', lw=2, linestyle='--')
-            ax.set_xlim([0.0, 1.0])
-            ax.set_ylim([0.0, 1.05])
-            ax.set_xlabel('False Positive Rate')
-            ax.set_ylabel('True Positive Rate')
-            ax.set_title('Extended Logistic Regression ROC Curve')
-            ax.legend(loc='lower right')
-            st.pyplot(fig)
-
-            # Perform Random Forest classification
-            st.write("Performing Random Forest Classification...")
-            rf_model_2 = perform_random_forest(merged_data, extended_independent_vars)
-
-            # Display the feature importance
-            feature_importance = pd.DataFrame({
-                'Feature': extended_independent_vars,  
-                'Importance': rf_model_2.feature_importances_
-            })
-            st.subheader("Random Forest Feature Importance")
-            st.table(feature_importance)
-
-            # Plot the feature importance
-            feature_importance.plot(kind='barh', x='Feature', y='Importance', legend=False)
-            plt.title('Random Forest Feature Importance')
-            plt.xlabel('Importance')
-            plt.ylabel('Feature')
-            plt.show()
-
-            feature_importance.plot(kind='barh', x='Feature', y='Importance')
-            st.pyplot(plt)
-
-        except KeyError as e:
-            st.error(f"Analysis error: {e}")
+        except Exception as e:
+            st.error(f"An error occurred: {e}")
             
     elif tab == "COVID-19 Map":
         st.write("Displaying the COVID-19 Interactive Map...")
