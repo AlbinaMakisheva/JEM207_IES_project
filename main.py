@@ -7,7 +7,7 @@ from src.data_cleaning import clean_data
 from src.data_merging import merge_data
 import matplotlib.pyplot as plt 
 from src.analysis import filter_data_around_events, plot_lag_correlations, categorize_by_autocorrelation, calculate_feature_importance, apply_differencing, check_stationarity, reduce_multicollinearity, perform_multiple_linear_regression, analyze_event_impact, prepare_binary_target, perform_logistic_regression, perform_extended_logistic_regression, perform_random_forest, plot_residual_diagnostics, test_and_correct_heteroscedasticity
-from src.visualization import plot_covid_cases, plot_stock_with_events, visualize_covid_data, plot_regression_results, plot_interactive_time_series, plot_bubble_chart, plot_scatter_matrix, plot_density_around_events
+from src.visualization import plot_covid_cases, plot_stock_with_events, visualize_covid_data, plot_regression_results, plot_interactive_time_series, plot_scatter_matrix, plot_interactive_heatmap
 from src.data_fetching import fetch_covid_data, fetch_stock_data
 from sklearn.metrics import accuracy_score, classification_report, roc_curve, auc
 from sklearn.preprocessing import StandardScaler
@@ -759,17 +759,13 @@ def main():
         st.header("Interactive Time Series Exploration")
         plot_interactive_time_series(merged_data, date_column='date')
 
-        # Bubble Chart
-        st.subheader("Bubble Chart: Stock Prices vs. COVID-19 Cases")
-        plot_bubble_chart(merged_data)
-
         # Scatter Plot Matrix
         st.subheader("Scatter Plot Matrix with Filters")
         plot_scatter_matrix(merged_data, events)
 
-        # Density Plots
-        st.subheader("Density Plots of Stock Returns Around Events")
-        plot_density_around_events(merged_data, events)
+        # plot the heatmap
+        plot_interactive_heatmap(merged_data, date_column='date', time_unit='month')
+
         
 
 if __name__ == "__main__":

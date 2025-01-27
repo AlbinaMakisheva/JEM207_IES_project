@@ -150,45 +150,6 @@ def plot_regression_results(coefficients, intercept, r2_score, feature_names, ou
     st.pyplot(plt) 
 
 
-def plot_bubble_chart(data):
-    """
-    Creates an interactive bubble chart with temporal animation.
-    """
-    st.header("Pfizer Stock vs COVID-19 Metrics (Bubble Chart)")
-    st.write("Visualizing stock price movements in relation to COVID-19 cases and vaccinations over time.")
-
-    required_columns = ['date', 'Close', 'new_cases', 'total_vaccinations']
-    missing_columns = [col for col in required_columns if col not in data.columns]
-    if missing_columns:
-        st.error(f"Missing required columns: {missing_columns}")
-        return
-
-    # Ensure 'date' is in datetime format
-    if not pd.api.types.is_datetime64_any_dtype(data['date']):
-        data['date'] = pd.to_datetime(data['date'])
-
-    # Create the bubble chart
-    fig = px.scatter(
-        data,
-        x="new_cases",
-        y="Close",
-        size="total_vaccinations",
-        color="Close",
-        animation_frame=data['date'].dt.strftime('%Y-%m-%d'),  # Format dates for animation
-        title="Bubble Chart: Pfizer Stock Price vs COVID-19 Cases with Vaccinations",
-        labels={
-            "new_cases": "New COVID-19 Cases",
-            "Close": "Pfizer Stock Price (USD)",
-            "total_vaccinations": "Total Vaccinations"
-        },
-        hover_data={"date": True},  # Show date in hover info
-        color_continuous_scale=px.colors.sequential.Plasma
-    )
-    fig.update_traces(marker=dict(opacity=0.7, line=dict(width=1, color='black')))
-    fig.update_layout(template="plotly_white", xaxis_title="New COVID-19 Cases", yaxis_title="Pfizer Stock Price (USD)")
-    st.plotly_chart(fig)
-
-
 def plot_scatter_matrix(data, events):
     """
     Creates a scatter plot matrix with interactive filtering.
@@ -196,10 +157,14 @@ def plot_scatter_matrix(data, events):
     st.header("Scatter Matrix: Key COVID-19 and Stock Market Metrics")
     st.write("Explore how different variables relate to Pfizer's stock price.")
 
+    # Ensure valid columns for default variables
+    default_vars = ['Close', 'new_cases', 'total_vaccinations', 'stringency_index']
+    default_vars = [var for var in default_vars if var in data.columns]
+
     variables = st.multiselect(
         "Select Variables to Include in the Scatter Matrix",
         data.columns.tolist(),
-        default=['Close', 'new_cases', 'total_vaccinations', 'stringency_index']
+        default=default_vars
     )
 
     event_filter = st.selectbox("Filter Data by Event", ["No Filter"] + list(events.keys()))
@@ -215,7 +180,7 @@ def plot_scatter_matrix(data, events):
         fig = px.scatter_matrix(
             filtered_data,
             dimensions=variables,
-            color="Close",
+            color="Close" if "Close" in variables else variables[0],
             title="Scatter Plot Matrix: Stock & COVID-19 Metrics",
             labels={col: col.replace('_', ' ').title() for col in variables},
             template="plotly_white"
@@ -225,42 +190,92 @@ def plot_scatter_matrix(data, events):
         st.write("Please select at least two variables to plot.")
 
 
-def plot_density_around_events(data, events):
+def plot_interactive_heatmap(data, date_column='date', time_unit='month'):
     """
-    Creates density plots of stock returns before, during, and after significant events.
-    """
-    st.header("Stock Returns Density Around Key Events")
-    st.write("Visualizing Pfizer's stock return distribution around major COVID-19 events.")
+    Creates an enhanced interactive heatmap with a time slider to explore relationships over time.
 
-    # Ensure the required column exists
-    if 'daily_return' not in data.columns:
-        st.error("Column 'daily_return' (representing stock returns) is missing from the data.")
+    """
+    st.header("Interactive Heatmap: Stock Returns vs COVID-19 Metrics Over Time")
+    st.write("Explore the relationship between stock returns and COVID-19 variables using a time slider.")
+
+    # Ensure date is in datetime format
+    if not pd.api.types.is_datetime64_any_dtype(data[date_column]):
+        data[date_column] = pd.to_datetime(data[date_column])
+
+    # Aggregate by selected time unit
+    if time_unit == 'month':
+        data['time_unit'] = data[date_column].dt.to_period('M').astype(str)  # Convert Period to string
+    elif time_unit == 'quarter':
+        data['time_unit'] = data[date_column].dt.to_period('Q').astype(str)  # Convert Period to string
+    elif time_unit == 'year':
+        data['time_unit'] = data[date_column].dt.to_period('Y').astype(str)  # Convert Period to string
+    else:
+        st.error("Invalid time unit selected. Please choose 'month', 'quarter', or 'year'.")
         return
 
-    event_filter = st.selectbox("Select Event to Analyze", list(events.keys()))
-    if event_filter:
-        event_date = pd.to_datetime(events[event_filter])
-        time_window = st.slider("Time Window Around Event (Days)", 7, 90, 30)
+    # Filter numeric columns
+    numeric_data = data.select_dtypes(include=['number'])
 
-        before_event = data[(data['date'] < event_date) & 
-                            (data['date'] >= event_date - pd.Timedelta(days=time_window))]
-        after_event = data[(data['date'] >= event_date) & 
-                           (data['date'] <= event_date + pd.Timedelta(days=time_window))]
+    # Allow users to select variables of interest
+    available_variables = numeric_data.columns.tolist()
+    selected_variables = st.multiselect(
+        "Select Variables for Heatmap",
+        available_variables,
+        default=available_variables[:10]  # Default to the first 10 variables
+    )
 
-        # Ensure there is enough data for plotting
-        if before_event.empty or after_event.empty:
-            st.warning(f"Not enough data around the event '{event_filter}' to generate density plots.")
-            return
+    # Initialize an empty DataFrame to store correlations
+    correlation_data = []
 
-        # Plot density plots
-        sns.set(style="whitegrid")
-        plt.figure(figsize=(10, 6))
-        sns.kdeplot(before_event['daily_return'], label='Before Event', fill=True, color='blue', alpha=0.5)
-        sns.kdeplot(after_event['daily_return'], label='After Event', fill=True, color='red', alpha=0.5)
+    # Compute correlations for each time period
+    for time_period, group in numeric_data.groupby(data['time_unit']):
+        if len(group) < 2:
+            st.warning(f"Skipping time period {time_period}: Insufficient data for correlation.")
+            continue
 
-        plt.axvline(0, color='black', linestyle='--', linewidth=1)
-        plt.title(f"Pfizer Stock Returns Before and After: {event_filter}", fontsize=16)
-        plt.xlabel("Daily Returns", fontsize=14)
-        plt.ylabel("Density", fontsize=14)
-   
+        # Filter selected variables
+        group = group[selected_variables + ['daily_return']]
+
+        # Correlation matrix
+        corr_matrix = group.corr()[['daily_return']].reset_index()  # Focus on correlations with `daily_return`
+        corr_matrix['time_unit'] = time_period  # Add time unit for tracking
+        correlation_data.append(corr_matrix)
+
+    # If no correlation data, raise a warning and exit
+    if not correlation_data:
+        st.error("No valid correlation data found. Ensure sufficient data for each time period.")
+        return
+
+    # Combine all correlation matrices
+    heatmap_data = pd.concat(correlation_data, ignore_index=True)
+
+    # Pivot for heatmap format
+    heatmap_pivot = heatmap_data.pivot(index='time_unit', columns='index', values='daily_return')
+
+    # Sort variables by average correlation magnitude
+    variable_order = heatmap_pivot.abs().mean(axis=0).sort_values(ascending=False).index
+    heatmap_pivot = heatmap_pivot[variable_order]
+
+    # Create heatmap
+    fig = px.imshow(
+        heatmap_pivot,
+        labels=dict(x="Variables", y="Time Period", color="Correlation"),
+        title="Enhanced Correlation of Stock Returns with COVID-19 Metrics Over Time",
+        aspect="auto",
+        color_continuous_scale="RdBu_r",
+        zmin=-1,
+        zmax=1
+    )
+    fig.update_layout(
+        xaxis=dict(tickangle=45),  # Rotate x-axis labels for readability
+        template="plotly_white"
+    )
+    st.plotly_chart(fig)
+
+
+
+
+
+
+
 
