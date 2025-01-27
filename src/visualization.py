@@ -5,6 +5,7 @@ from pathlib import Path
 import streamlit as st
 import matplotlib.dates as mdates
 import pandas as pd
+import plotly.express as px
 
 # Plots smoothed COVID-19 cases globally over time
 def plot_covid_cases(data):
@@ -84,6 +85,55 @@ def visualize_covid_data(data, output_path='./visualizations/covid_trends.png'):
     plt.tight_layout()
     st.pyplot(plt) 
 
+#Interactive Time Series 
+
+def plot_interactive_time_series(data, date_column='date', default_vars=None):
+    if default_vars is None:
+        default_vars = ['new_cases_smoothed', 'new_deaths_smoothed', 'gdp_per_capita', 'stringency_index', 'new_vaccinations_smoothed']
+    
+    # Allow users to select variables to plot
+    st.header("Interactive Time Series Exploration")
+    st.write("Select variables to plot and explore trends interactively.")
+    
+    variables = st.multiselect(
+        "Select Variables to Plot",
+        data.columns.tolist(),
+        default=default_vars
+    )
+    
+    scale_type = st.radio("Select Scale Type:", ["Linear", "Logarithmic"], index=0)
+    
+    # Normalization option
+    normalize = st.checkbox("Normalize Data (Min-Max Scaling)", value=False)
+    
+    if variables:
+        # Normalize data
+        if normalize:
+            data[variables] = data[variables].apply(
+                lambda x: (x - x.min()) / (x.max() - x.min()) if x.max() != x.min() else x
+            )
+        
+        fig = px.line(
+            data,
+            x=date_column,
+            y=variables,
+            title="Interactive Time Series Exploration",
+            labels={date_column: "Date"},
+            markers=True
+        )
+        
+        if scale_type == "Logarithmic":
+            fig.update_layout(yaxis_type="log")
+        
+        fig.update_layout(
+            xaxis_title="Date",
+            yaxis_title="Values",
+            legend_title="Variables",
+            template="plotly_white"
+        )
+        st.plotly_chart(fig)
+    else:
+        st.write("Please select at least one variable to plot.")
 
 def plot_regression_results(coefficients, intercept, r2_score, feature_names, output_path='./visualizations/regression_results.png'):
     if len(coefficients) != len(feature_names):
@@ -98,3 +148,93 @@ def plot_regression_results(coefficients, intercept, r2_score, feature_names, ou
     plt.xticks(rotation=45, ha='right')
     plt.tight_layout()
     st.pyplot(plt) 
+
+
+def plot_bubble_chart(data):
+    """
+    Creates an interactive bubble chart with temporal animation.
+    """
+    st.header("Pfizer Stock vs COVID-19 Metrics (Bubble Chart)")
+    st.write("Visualizing stock price movements in relation to COVID-19 cases and vaccinations over time.")
+
+    required_columns = ['date', 'Close', 'new_cases', 'total_vaccinations']
+    if not all(col in data.columns for col in required_columns):
+        st.error(f"Missing required columns: {set(required_columns) - set(data.columns)}")
+        return
+
+    fig = px.scatter(
+        data,
+        x="new_cases",
+        y="Close",
+        size="total_vaccinations",
+        color="Close",
+        animation_frame=data['date'].dt.strftime('%Y-%m-%d'),
+        title="Bubble Chart: Pfizer Stock Price vs COVID-19 Cases with Vaccinations",
+        labels={"new_cases": "New COVID-19 Cases", "Close": "Pfizer Stock Price (USD)", "total_vaccinations": "Total Vaccinations"},
+        color_continuous_scale=px.colors.sequential.Plasma
+    )
+    fig.update_traces(marker=dict(opacity=0.7, line=dict(width=1, color='black')))
+    fig.update_layout(template="plotly_white")
+    st.plotly_chart(fig)
+
+def plot_scatter_matrix(data, events):
+    """
+    Creates a scatter plot matrix with interactive filtering.
+    """
+    st.header("Scatter Matrix: Key COVID-19 and Stock Market Metrics")
+    st.write("Explore how different variables relate to Pfizer's stock price.")
+
+    variables = st.multiselect(
+        "Select Variables to Include in the Scatter Matrix",
+        data.columns.tolist(),
+        default=['Close', 'new_cases', 'total_vaccinations', 'stringency_index']
+    )
+
+    event_filter = st.selectbox("Filter Data by Event", ["No Filter"] + list(events.keys()))
+    if event_filter != "No Filter":
+        event_date = pd.to_datetime(events[event_filter])
+        time_window = st.slider("Time Window Around Event (Days)", 7, 90, 30)
+        data = data[(data['date'] >= event_date - pd.Timedelta(days=time_window)) &
+                    (data['date'] <= event_date + pd.Timedelta(days=time_window))]
+    
+    if len(variables) >= 2:
+        fig = px.scatter_matrix(
+            data,
+            dimensions=variables,
+            color="Close",
+            title="Scatter Plot Matrix: Stock & COVID-19 Metrics",
+            labels={col: col.replace('_', ' ').title() for col in variables},
+            template="plotly_white"
+        )
+        st.plotly_chart(fig)
+    else:
+        st.write("Please select at least two variables to plot.")
+
+def plot_density_around_events(data, events):
+    """
+    Creates density plots of stock returns before, during, and after significant events.
+    """
+    st.header("Stock Returns Density Around Key Events")
+    st.write("Visualizing Pfizer's stock return distribution around major COVID-19 events.")
+
+    event_filter = st.selectbox("Select Event to Analyze", list(events.keys()))
+    if event_filter:
+        event_date = pd.to_datetime(events[event_filter])
+        time_window = st.slider("Time Window Around Event (Days)", 7, 90, 30)
+        before_event = data[(data['date'] < event_date) &
+                            (data['date'] >= event_date - pd.Timedelta(days=time_window))]
+        after_event = data[(data['date'] >= event_date) &
+                           (data['date'] <= event_date + pd.Timedelta(days=time_window))]
+        
+        sns.set(style="whitegrid")
+        plt.figure(figsize=(10, 6))
+        sns.kdeplot(before_event['Stock_Returns'], label='Before Event', fill=True, color='blue', alpha=0.5)
+        sns.kdeplot(after_event['Stock_Returns'], label='After Event', fill=True, color='red', alpha=0.5)
+
+        plt.axvline(0, color='black', linestyle='--', linewidth=1)
+        plt.title(f"Pfizer Stock Returns Before and After: {event_filter}", fontsize=16)
+        plt.xlabel("Stock Returns", fontsize=14)
+        plt.ylabel("Density", fontsize=14)
+        plt.legend(loc="upper left", fontsize=12)
+        plt.tight_layout()
+        st.pyplot(plt)
