@@ -158,24 +158,36 @@ def plot_bubble_chart(data):
     st.write("Visualizing stock price movements in relation to COVID-19 cases and vaccinations over time.")
 
     required_columns = ['date', 'Close', 'new_cases', 'total_vaccinations']
-    if not all(col in data.columns for col in required_columns):
-        st.error(f"Missing required columns: {set(required_columns) - set(data.columns)}")
+    missing_columns = [col for col in required_columns if col not in data.columns]
+    if missing_columns:
+        st.error(f"Missing required columns: {missing_columns}")
         return
 
+    # Ensure 'date' is in datetime format
+    if not pd.api.types.is_datetime64_any_dtype(data['date']):
+        data['date'] = pd.to_datetime(data['date'])
+
+    # Create the bubble chart
     fig = px.scatter(
         data,
         x="new_cases",
         y="Close",
         size="total_vaccinations",
         color="Close",
-        animation_frame=data['date'].dt.strftime('%Y-%m-%d'),
+        animation_frame=data['date'].dt.strftime('%Y-%m-%d'),  # Format dates for animation
         title="Bubble Chart: Pfizer Stock Price vs COVID-19 Cases with Vaccinations",
-        labels={"new_cases": "New COVID-19 Cases", "Close": "Pfizer Stock Price (USD)", "total_vaccinations": "Total Vaccinations"},
+        labels={
+            "new_cases": "New COVID-19 Cases",
+            "Close": "Pfizer Stock Price (USD)",
+            "total_vaccinations": "Total Vaccinations"
+        },
+        hover_data={"date": True},  # Show date in hover info
         color_continuous_scale=px.colors.sequential.Plasma
     )
     fig.update_traces(marker=dict(opacity=0.7, line=dict(width=1, color='black')))
-    fig.update_layout(template="plotly_white")
+    fig.update_layout(template="plotly_white", xaxis_title="New COVID-19 Cases", yaxis_title="Pfizer Stock Price (USD)")
     st.plotly_chart(fig)
+
 
 def plot_scatter_matrix(data, events):
     """
@@ -194,12 +206,14 @@ def plot_scatter_matrix(data, events):
     if event_filter != "No Filter":
         event_date = pd.to_datetime(events[event_filter])
         time_window = st.slider("Time Window Around Event (Days)", 7, 90, 30)
-        data = data[(data['date'] >= event_date - pd.Timedelta(days=time_window)) &
-                    (data['date'] <= event_date + pd.Timedelta(days=time_window))]
-    
+        filtered_data = data[(data['date'] >= event_date - pd.Timedelta(days=time_window)) &
+                             (data['date'] <= event_date + pd.Timedelta(days=time_window))]
+    else:
+        filtered_data = data
+
     if len(variables) >= 2:
         fig = px.scatter_matrix(
-            data,
+            filtered_data,
             dimensions=variables,
             color="Close",
             title="Scatter Plot Matrix: Stock & COVID-19 Metrics",
@@ -210,6 +224,7 @@ def plot_scatter_matrix(data, events):
     else:
         st.write("Please select at least two variables to plot.")
 
+
 def plot_density_around_events(data, events):
     """
     Creates density plots of stock returns before, during, and after significant events.
@@ -217,24 +232,35 @@ def plot_density_around_events(data, events):
     st.header("Stock Returns Density Around Key Events")
     st.write("Visualizing Pfizer's stock return distribution around major COVID-19 events.")
 
+    # Ensure the required column exists
+    if 'daily_return' not in data.columns:
+        st.error("Column 'daily_return' (representing stock returns) is missing from the data.")
+        return
+
     event_filter = st.selectbox("Select Event to Analyze", list(events.keys()))
     if event_filter:
         event_date = pd.to_datetime(events[event_filter])
         time_window = st.slider("Time Window Around Event (Days)", 7, 90, 30)
-        before_event = data[(data['date'] < event_date) &
+
+        before_event = data[(data['date'] < event_date) & 
                             (data['date'] >= event_date - pd.Timedelta(days=time_window))]
-        after_event = data[(data['date'] >= event_date) &
+        after_event = data[(data['date'] >= event_date) & 
                            (data['date'] <= event_date + pd.Timedelta(days=time_window))]
-        
+
+        # Ensure there is enough data for plotting
+        if before_event.empty or after_event.empty:
+            st.warning(f"Not enough data around the event '{event_filter}' to generate density plots.")
+            return
+
+        # Plot density plots
         sns.set(style="whitegrid")
         plt.figure(figsize=(10, 6))
-        sns.kdeplot(before_event['Stock_Returns'], label='Before Event', fill=True, color='blue', alpha=0.5)
-        sns.kdeplot(after_event['Stock_Returns'], label='After Event', fill=True, color='red', alpha=0.5)
+        sns.kdeplot(before_event['daily_return'], label='Before Event', fill=True, color='blue', alpha=0.5)
+        sns.kdeplot(after_event['daily_return'], label='After Event', fill=True, color='red', alpha=0.5)
 
         plt.axvline(0, color='black', linestyle='--', linewidth=1)
         plt.title(f"Pfizer Stock Returns Before and After: {event_filter}", fontsize=16)
-        plt.xlabel("Stock Returns", fontsize=14)
+        plt.xlabel("Daily Returns", fontsize=14)
         plt.ylabel("Density", fontsize=14)
-        plt.legend(loc="upper left", fontsize=12)
-        plt.tight_layout()
-        st.pyplot(plt)
+   
+
