@@ -69,14 +69,57 @@ def main():
             The datasets used in this analysis include global COVID-19 case data and stock price data for Pfizer. These datasets are combined to enable the analysis of event-driven changes in stock behavior.
         """)
         
+        # Graph 1: Stock Price with Key Events
+        st.write("### Stock Price with Key Events")
+
         plot_stock_with_events(merged_data, events)
+
+        st.write("""
+        - This graph shows **Pfizer's stock price (USD) over time**, with key COVID-19 events marked by vertical dashed lines.
+        - **Observations:**
+            - **WHO Declares Pandemic (March 2020)**: Pfizer's stock initially experienced **volatility**, showing no immediate uptrend.
+            - **First Vaccine Approval (December 2020)**: The stock **rallied significantly**, possibly indicating investor confidence in vaccine-driven revenue.
+            - **Vaccination Threshold Reached (July 2021)**: The stock peaked, likely due to strong vaccine sales expectations.
+            - **Relaxation of Lockdowns (May 2022)**: Stock **began to decline**, reflecting reduced pandemic-related revenue expectations.
+            - **China Easing Zero-COVID Policy (January 2023)**: The downward trend continued as the pandemic's impact on the stock market faded.
+
+        - **Overall Trend:**
+            - The stock price was **stable before the pandemic**, **volatile at the start**, **rallied after vaccine approvals**, and **declined post-pandemic** as COVID-related revenues decreased.
+        """)
+
+        # Graph 2: Global COVID-19 New Cases
+        st.write("### Global COVID-19 New Cases")
+
         visualize_covid_data(covid_data)
+
+        st.write("""
+        - This graph presents **global new COVID-19 cases**, with **red bars representing raw values** and a **blue line for smoothed trends**.
+        - **Observations:**
+            - **Early waves in 2020**: The number of cases increased significantly after the pandemic declaration.
+            - **Major peaks in late 2021 and early 2022**: These align with **Delta and Omicron variant surges**.
+            - **Case decline after mid-2022**: Due to **mass vaccinations, natural immunity, and reduced testing**.
+
+        - **Connection to Pfizer Stock Prices:**
+            - **Early pandemic surges did not significantly increase Pfizer's stock price**.
+            - **The biggest stock price rise happened after vaccine approvals**, not during case surges.
+            - **After case peaks and easing of restrictions, Pfizer’s stock declined**, suggesting revenue expectations shifted.
+                """)
 
     if tab == "Analysis":
         # Filter data around key events
         st.write("Filtering data around key events...")
         window_size = st.slider("Select window size around events (in months)", 1, 12, 3)
         filtered_data = filter_data_around_events(merged_data, events, window_months=window_size)
+
+        st.write("""
+                The purpose of filtering data around key events is to **analyze patterns or trends before and after these events** to see their effects, such as **stock price movements, changes in COVID-19 cases, etc.** 
+
+                ### Why Filter Data?
+                - **It isolates the data** to focus on the periods **directly before and after key events** to study their impact.
+                - For example, if analyzing the event **"First Vaccine (2020-12-08)"** with a **1-month window**:
+                - The filtered dataset will include data from **2020-11-08 to 2021-01-08**.
+                - **Applying this method to all events** creates a dataset segmented into **smaller windows**, allowing a **detailed analysis** of each event's impact.
+                """)
 
         try:
             # Perform autocorrelation analysis
@@ -92,7 +135,6 @@ def main():
         except KeyError as e:
             st.error(f"Error during autocorrelation analysis: {e}")
 
-        """
         try:
             #Categorize variables by autocorrelation
             st.write("Categorizing variables by autocorrelation...")
@@ -158,7 +200,6 @@ def main():
         except KeyError as e:
             st.error(f"Error during stationarity and multicollinearity analysis: {e}")
 
-        """
 
         try:
             #Adding lag variables

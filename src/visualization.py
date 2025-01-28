@@ -6,6 +6,7 @@ import streamlit as st
 import matplotlib.dates as mdates
 import pandas as pd
 import plotly.express as px
+from sklearn.preprocessing import MinMaxScaler
 
 # Plots smoothed COVID-19 cases globally over time
 def plot_covid_cases(data):
@@ -152,21 +153,23 @@ def plot_regression_results(coefficients, intercept, r2_score, feature_names, ou
 
 def plot_scatter_matrix(data, events):
     """
-    Creates a scatter plot matrix with interactive filtering.
+    Creates a scatter plot matrix with interactive filtering and better scaling. 
+        
     """
-    st.header("Scatter Matrix: Key COVID-19 and Stock Market Metrics")
-    st.write("Explore how different variables relate to Pfizer's stock price.")
+    st.header("Enhanced Scatter Matrix: Stock & COVID-19 Metrics")
+    st.write("""Explore how different variables relate to Pfizer's stock price. Each subplot compares two variables: If most points form a line, they have a strong correlation. If points are scattered randomly, the variables have little/no correlation.""")
 
-    # Ensure valid columns for default variables
-    default_vars = ['Close', 'new_cases', 'total_vaccinations', 'stringency_index']
+    # Default key variables
+    default_vars = ['daily_return', 'new_cases', 'total_vaccinations', 'stringency_index']
     default_vars = [var for var in default_vars if var in data.columns]
 
     variables = st.multiselect(
         "Select Variables to Include in the Scatter Matrix",
-        data.columns.tolist(),
+        data.select_dtypes(include=['number']).columns.tolist(),
         default=default_vars
     )
 
+    # Apply event-based filtering
     event_filter = st.selectbox("Filter Data by Event", ["No Filter"] + list(events.keys()))
     if event_filter != "No Filter":
         event_date = pd.to_datetime(events[event_filter])
@@ -176,29 +179,31 @@ def plot_scatter_matrix(data, events):
     else:
         filtered_data = data
 
+    scaler = MinMaxScaler()
+    scaled_data = pd.DataFrame(scaler.fit_transform(filtered_data[variables]), columns=variables)
+
     if len(variables) >= 2:
         fig = px.scatter_matrix(
-            filtered_data,
+            scaled_data,
             dimensions=variables,
-            color="Close" if "Close" in variables else variables[0],
-            title="Scatter Plot Matrix: Stock & COVID-19 Metrics",
+            color=filtered_data['daily_return'] if "daily_return" in filtered_data.columns else variables[0],
+            title="Enhanced Scatter Plot Matrix: Stock & COVID-19 Metrics",
             labels={col: col.replace('_', ' ').title() for col in variables},
-            template="plotly_white"
+            template="plotly_white",
+            color_continuous_scale="Viridis"  
         )
         st.plotly_chart(fig)
     else:
-        st.write("Please select at least two variables to plot.")
+        st.warning("Please select at least two variables to plot.")
 
 
 def plot_interactive_heatmap(data, date_column='date', time_unit='month'):
     """
     Creates an enhanced interactive heatmap with a time slider to explore relationships over time.
-
     """
     st.header("Interactive Heatmap: Stock Returns vs COVID-19 Metrics Over Time")
-    st.write("Explore the relationship between stock returns and COVID-19 variables using a time slider.")
+    st.write("Explore how stock returns correlate with key COVID-19 metrics over different time periods.")
 
-    # Ensure date is in datetime format
     if not pd.api.types.is_datetime64_any_dtype(data[date_column]):
         data[date_column] = pd.to_datetime(data[date_column])
 
@@ -212,64 +217,61 @@ def plot_interactive_heatmap(data, date_column='date', time_unit='month'):
     else:
         st.error("Invalid time unit selected. Please choose 'month', 'quarter', or 'year'.")
         return
-
-    # Filter numeric columns
+    
     numeric_data = data.select_dtypes(include=['number'])
 
-    # Allow users to select variables of interest
+    # Allow users to select variables
     available_variables = numeric_data.columns.tolist()
     selected_variables = st.multiselect(
         "Select Variables for Heatmap",
         available_variables,
-        default=available_variables[:10]  # Default to the first 10 variables
+        default=['daily_return', 'new_cases', 'new_deaths', 'total_vaccinations', 'stringency_index']
     )
 
-    # Initialize an empty DataFrame to store correlations
-    correlation_data = []
+    if 'daily_return' not in selected_variables:
+        selected_variables.append('daily_return')  
 
+    correlation_data = []
+    
     # Compute correlations for each time period
     for time_period, group in numeric_data.groupby(data['time_unit']):
         if len(group) < 2:
-            st.warning(f"Skipping time period {time_period}: Insufficient data for correlation.")
+            st.warning(f"Skipping time period {time_period}: Not enough data for correlation.")
             continue
-
-        # Filter selected variables
-        group = group[selected_variables + ['daily_return']]
-
-        # Correlation matrix
-        corr_matrix = group.corr()[['daily_return']].reset_index()  # Focus on correlations with `daily_return`
-        corr_matrix['time_unit'] = time_period  # Add time unit for tracking
+        
+        group = group[selected_variables]
+        corr_matrix = group.corr()[['daily_return']].reset_index()  
+        corr_matrix['time_unit'] = time_period  
         correlation_data.append(corr_matrix)
 
-    # If no correlation data, raise a warning and exit
     if not correlation_data:
         st.error("No valid correlation data found. Ensure sufficient data for each time period.")
         return
-
-    # Combine all correlation matrices
+    
     heatmap_data = pd.concat(correlation_data, ignore_index=True)
 
-    # Pivot for heatmap format
     heatmap_pivot = heatmap_data.pivot(index='time_unit', columns='index', values='daily_return')
 
-    # Sort variables by average correlation magnitude
+    # Sort variables by correlation strength
     variable_order = heatmap_pivot.abs().mean(axis=0).sort_values(ascending=False).index
     heatmap_pivot = heatmap_pivot[variable_order]
 
-    # Create heatmap
     fig = px.imshow(
         heatmap_pivot,
         labels=dict(x="Variables", y="Time Period", color="Correlation"),
         title="Enhanced Correlation of Stock Returns with COVID-19 Metrics Over Time",
         aspect="auto",
-        color_continuous_scale="RdBu_r",
-        zmin=-1,
-        zmax=1
+        color_continuous_scale="Cividis", 
+        zmin=-0.5,  
+        zmax=0.5
     )
+
     fig.update_layout(
-        xaxis=dict(tickangle=45),  # Rotate x-axis labels for readability
-        template="plotly_white"
+        xaxis=dict(tickangle=45),  
+        template="plotly_white",
+        font=dict(size=12)
     )
+
     st.plotly_chart(fig)
 
 
