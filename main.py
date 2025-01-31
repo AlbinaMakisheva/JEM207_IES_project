@@ -6,8 +6,8 @@ import plotly.express as px
 from src.data_cleaning import clean_data
 from src.data_merging import merge_data
 import matplotlib.pyplot as plt 
-from src.analysis import filter_data_around_events, plot_lag_correlations, categorize_by_autocorrelation, calculate_feature_importance, apply_differencing, check_stationarity, reduce_multicollinearity, perform_multiple_linear_regression, analyze_event_impact, prepare_binary_target, perform_logistic_regression, perform_extended_logistic_regression, perform_random_forest
-from src.visualization import plot_covid_cases, plot_stock_with_events, visualize_covid_data, plot_regression_results
+from src.analysis import filter_data_around_events, plot_lag_correlations, categorize_by_autocorrelation, calculate_feature_importance, apply_differencing, check_stationarity, reduce_multicollinearity, perform_multiple_linear_regression, analyze_event_impact, prepare_binary_target, perform_logistic_regression, perform_extended_logistic_regression, perform_random_forest, plot_residual_diagnostics, test_and_correct_heteroscedasticity
+from src.visualization import plot_covid_cases, plot_stock_with_events, visualize_covid_data, plot_regression_results, plot_interactive_time_series, plot_scatter_matrix, plot_interactive_heatmap
 from src.data_fetching import fetch_covid_data, fetch_stock_data
 from sklearn.metrics import accuracy_score, classification_report, roc_curve, auc
 from sklearn.preprocessing import StandardScaler
@@ -69,14 +69,57 @@ def main():
             The datasets used in this analysis include global COVID-19 case data and stock price data for Pfizer. These datasets are combined to enable the analysis of event-driven changes in stock behavior.
         """)
         
+        # Graph 1: Stock Price with Key Events
+        st.write("### Stock Price with Key Events")
+
         plot_stock_with_events(merged_data, events)
+
+        st.write("""
+        - This graph shows **Pfizer's stock price (USD) over time**, with key COVID-19 events marked by vertical dashed lines.
+        - **Observations:**
+            - **WHO Declares Pandemic (March 2020)**: Pfizer's stock initially experienced **volatility**, showing no immediate uptrend.
+            - **First Vaccine Approval (December 2020)**: The stock **rallied significantly**, possibly indicating investor confidence in vaccine-driven revenue.
+            - **Vaccination Threshold Reached (July 2021)**: The stock peaked, likely due to strong vaccine sales expectations.
+            - **Relaxation of Lockdowns (May 2022)**: Stock **began to decline**, reflecting reduced pandemic-related revenue expectations.
+            - **China Easing Zero-COVID Policy (January 2023)**: The downward trend continued as the pandemic's impact on the stock market faded.
+
+        - **Overall Trend:**
+            - The stock price was **stable before the pandemic**, **volatile at the start**, **rallied after vaccine approvals**, and **declined post-pandemic** as COVID-related revenues decreased.
+        """)
+
+        # Graph 2: Global COVID-19 New Cases
+        st.write("### Global COVID-19 New Cases")
+
         visualize_covid_data(covid_data)
+
+        st.write("""
+        - This graph presents **global new COVID-19 cases**, with **red bars representing raw values** and a **blue line for smoothed trends**.
+        - **Observations:**
+            - **Early waves in 2020**: The number of cases increased significantly after the pandemic declaration.
+            - **Major peaks in late 2021 and early 2022**: These align with **Delta and Omicron variant surges**.
+            - **Case decline after mid-2022**: Due to **mass vaccinations, natural immunity, and reduced testing**.
+
+        - **Connection to Pfizer Stock Prices:**
+            - **Early pandemic surges did not significantly increase Pfizer's stock price**.
+            - **The biggest stock price rise happened after vaccine approvals**, not during case surges.
+            - **After case peaks and easing of restrictions, Pfizer’s stock declined**, suggesting revenue expectations shifted.
+                """)
 
     if tab == "Analysis":
         # Filter data around key events
         st.write("Filtering data around key events...")
         window_size = st.slider("Select window size around events (in months)", 1, 12, 3)
         filtered_data = filter_data_around_events(merged_data, events, window_months=window_size)
+
+        st.write("""
+                The purpose of filtering data around key events is to **analyze patterns or trends before and after these events** to see their effects, such as **stock price movements, changes in COVID-19 cases, etc.** 
+
+                ### Why Filter Data?
+                - **It isolates the data** to focus on the periods **directly before and after key events** to study their impact.
+                - For example, if analyzing the event **"First Vaccine (2020-12-08)"** with a **1-month window**:
+                - The filtered dataset will include data from **2020-11-08 to 2021-01-08**.
+                - **Applying this method to all events** creates a dataset segmented into **smaller windows**, allowing a **detailed analysis** of each event's impact.
+                """)
 
         try:
             # Perform autocorrelation analysis
@@ -91,7 +134,6 @@ def main():
             """)
         except KeyError as e:
             st.error(f"Error during autocorrelation analysis: {e}")
-
 
         try:
             #Categorize variables by autocorrelation
@@ -160,6 +202,15 @@ def main():
 
 
         try:
+            #Adding lag variables
+
+            st.header("Add Lag Variables")
+            st.write("""
+                Given the high correlation in most of our variables and the caracteristics of our analysis, we decided to create lag variables. Lag variables account for the time delay between a predictor variable and its effect on the dependent variable (stock returns). We believe that this is highly relevant for variables like vaccinations that take time to impact COVID-19 metrics which in turn may influence Pfizer's stock performance. For highly autocorrelated variables, their lagged values might add predictive power.
+
+                Given this, we also decided to separate the variables to account for the time it would take to impact the outcome. Long lags (3-6 months) might be helpful for variables like gdp_per_capita, stringency_index, vaccination rates, or vaccination signals, as their effects are often gradual. Variables like new_cases and new_deaths typically have shorter lags (e.g., 1–2 weeks) since the market reacts quickly to changes in pandemic severity.
+            """)
+
             # First Linear Regression
             st.header("First Linear Regression")
 
@@ -371,6 +422,145 @@ def main():
 
             # Intercept
             st.markdown(f"**Intercept:** {regression_model.intercept_:.4f}")
+
+            # Residual Diagnostics for Linear Regressions
+            st.header("Residual Diagnostics")
+            st.write("The purpose of this analysis is to visualize residuals to check the goodness-of-fit of regression models")
+
+            # Helper function to ensure X and y have aligned rows
+            def align_data(X, y):
+                """Align X and y by their indices to ensure compatibility."""
+                aligned_data = pd.concat([X, y], axis=1).dropna()
+                return aligned_data[X.columns], aligned_data[y.name]
+
+            # Residuals for the first regression
+            try:
+                st.write("Analyzing residuals for the first regression ...")
+                # Define the independent and dependent variables
+                X_reg1 = filtered_data[reg1_independent_vars]
+                y_reg1 = filtered_data['daily_return']
+                # Align data
+                X_reg1_aligned, y_reg1_aligned = align_data(X_reg1, y_reg1)
+                # Perform the regression
+                model_reg1, _ = perform_multiple_linear_regression(filtered_data, 'daily_return', reg1_independent_vars)
+                # Plot residual diagnostics
+                plot_residual_diagnostics(model_reg1, X_reg1_aligned, y_reg1_aligned, "First Regression")
+            except Exception as e:
+                st.error(f"Error during residual diagnostics for First Regression: {e}")
+
+            # Residuals for the second regression
+            try:
+                st.write("Analyzing residuals for the second regression ...")
+                # Define the independent and dependent variables
+                X_reg2 = filtered_data[reg2_independent_vars]
+                y_reg2 = filtered_data['daily_return']
+                # Align data
+                X_reg2_aligned, y_reg2_aligned = align_data(X_reg2, y_reg2)
+                # Perform the regression
+                model_reg2, _ = perform_multiple_linear_regression(filtered_data, 'daily_return', reg2_independent_vars)
+                # Plot residual diagnostics
+                plot_residual_diagnostics(model_reg2, X_reg2_aligned, y_reg2_aligned, "Second Regression")
+            except Exception as e:
+                st.error(f"Error during residual diagnostics for Second Regression: {e}")
+
+            # Residuals for the third regression
+            try:
+                st.write("Analyzing residuals for the third regression ...")
+                # Define the independent and dependent variables
+                X_reg3 = filtered_data[independent_vars]
+                y_reg3 = filtered_data['new_deaths_smoothed']
+                # Align data
+                X_reg3_aligned, y_reg3_aligned = align_data(X_reg3, y_reg3)
+                # Perform the regression
+                model_reg3, _ = perform_multiple_linear_regression(filtered_data, 'new_deaths_smoothed', independent_vars)
+                # Plot residual diagnostics
+                plot_residual_diagnostics(model_reg3, X_reg3_aligned, y_reg3_aligned, "Third Regression")
+            except Exception as e:
+                st.error(f"Error during residual diagnostics for Third Regression: {e}")
+
+
+            #Observations from the Residual Diagnostics
+            st.write("Observations from the Residual Diagnostics...")
+
+            st.write("""
+                    In the first regression,the residuals seem relatively centered around 0, but there appears to be a pattern at lower fitted values.
+                    For the second regression, there is a noticeable clustering of residuals at certain ranges of fitted values. This indicates potential issues with heteroscedasticity (non-constant variance) or omitted variable bias.
+                    For the third regression, the residuals display a strong pattern,  which could be understood as a sign of heteroscedasticity.The variance of residuals increases with higher fitted values, indicating that the model struggles to capture variability at those levels.
+                    In summary, through graphical visualization, the residuals appear to increase, indicating that they are not constant over time.
+                    
+                    Regarding the Distribution of Residuals, the residuals of all three regressions are approximately normal but have visible tails or are slightly skewed. This indicates a reasonable fit but with room for improvement in capturing the underlying patterns.
+                    Given this, and to improve our regressions, we should apply the necessary corrections in order to restore the classical assumption of constant variance. It is also important to highlight that these procedures, while not fully resolving the problem of heteroscedasticity, restore the validity of statistical inference in large samples.
+                    """)
+           
+            #Heteroscedasticity analysis
+
+            st.header("Heteroscedasticity Analysis")
+            st.write("Testing for heteroscedasticity in the regression models and applying corrections if needed...")
+
+            try:
+                # First Regression
+                st.subheader("First Regression")
+                # Perform regression to retrieve the model
+                regression_model_1, r2_score_1 = perform_multiple_linear_regression(
+                    filtered_data,
+                    dependent_var='daily_return',
+                    independent_vars=reg1_independent_vars
+                )
+                st.write(f"R² Score for First Regression: {r2_score_1:.4f}")
+
+                # Prepare data for heteroscedasticity testing
+                X_reg1 = filtered_data[reg1_independent_vars].dropna()
+                y_reg1 = filtered_data['daily_return'].loc[X_reg1.index]
+                X_reg1, y_reg1 = X_reg1.align(y_reg1, join="inner", axis=0)
+
+                # Test and correct for heteroscedasticity
+                test_and_correct_heteroscedasticity(regression_model_1, X_reg1, y_reg1, "First Regression")
+            except Exception as e:
+                st.error(f"Error during heteroscedasticity analysis for First Regression: {e}")
+
+            try:
+                # Second Regression
+                st.subheader("Second Regression")
+                # Perform regression to retrieve the model
+                regression_model_2, r2_score_2 = perform_multiple_linear_regression(
+                    filtered_data,
+                    dependent_var='daily_return',
+                    independent_vars=reg2_independent_vars
+                )
+                st.write(f"R² Score for Second Regression: {r2_score_2:.4f}")
+
+                # Prepare data for heteroscedasticity testing
+                X_reg2 = filtered_data[reg2_independent_vars].dropna()
+                y_reg2 = filtered_data['daily_return'].loc[X_reg2.index]
+                X_reg2, y_reg2 = X_reg2.align(y_reg2, join="inner", axis=0)
+
+                # Test and correct for heteroscedasticity
+                test_and_correct_heteroscedasticity(regression_model_2, X_reg2, y_reg2, "Second Regression")
+            except Exception as e:
+                st.error(f"Error during heteroscedasticity analysis for Second Regression: {e}")
+
+            try:
+                
+                # Handle missing values for the third regression
+                st.subheader("Third Regression")
+                X_reg3 = filtered_data[independent_vars]
+                y_reg3 = filtered_data['new_deaths_smoothed']
+                X_reg3 = X_reg3.dropna()
+                y_reg3 = y_reg3[X_reg3.index]
+                corrected_model_3 = test_and_correct_heteroscedasticity(regression_model, X_reg3, y_reg3, "Third Regression")
+
+                st.write("""
+                The test statistic and a p-value of 0.0002, 0.0021 and 0.0000 (for the first, second and third regression respectively), indicate heteroscedasticity is present in the residuals of the third regression. Heteroscedasticity implies that the variance of the residuals is not constant, violating a key assumption of ordinary least squares (OLS). Weighted Least Squares (WLS) was applied to address heteroscedasticity, and a corrected model was obtained.
+               
+                The corrected model's results show:
+                         
+                >High R² (uncentered): Indicates the model explains almost all the variation in the dependent variable. However, this should be interpreted cautiously due to potential multicollinearity or numerical issues.
+                         
+                >Significant coefficients: All predictors have very low p-values (<0.05), suggesting they are statistically significant.
+                         """)
+
+            except Exception as e:
+                st.error(f"Error during heteroscedasticity analysis for Second Regression {e}")
 
 
         except Exception as e:
@@ -606,6 +796,17 @@ def main():
         st.write("Displaying the COVID-19 Interactive Map...")
         covid_data = clean_data(COVID_FILE)
         plot_covid_cases(covid_data)
+
+        st.header("Interactive Time Series Exploration")
+        plot_interactive_time_series(merged_data, date_column='date')
+
+        # Scatter Plot Matrix
+        st.subheader("Scatter Plot Matrix with Filters")
+        plot_scatter_matrix(merged_data, events)
+
+        # plot the heatmap
+        plot_interactive_heatmap(merged_data, date_column='date', time_unit='month')
+
         
 
 if __name__ == "__main__":

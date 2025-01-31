@@ -4,14 +4,16 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
-from sklearn.metrics import accuracy_score, classification_report
+from sklearn.metrics import accuracy_score, classification_report, mean_squared_error
 import numpy as np
 import matplotlib.pyplot as plt
 import streamlit as st
 from statsmodels.tsa.stattools import adfuller
 from statsmodels.stats.outliers_influence import variance_inflation_factor
-
+import seaborn as sns
 from .data_merging import merge_data
+import statsmodels.api as sm
+from statsmodels.stats.diagnostic import het_breuschpagan
 
 
 # Filter data around key events
@@ -227,6 +229,42 @@ def analyze_event_impact(data, event_column='Dummy_Variable', return_column='dai
     print("Event Impact Analysis:\n", event_impact)
     return event_impact
 
+#Residual Diagnostics
+
+def plot_residual_diagnostics(model, X, y, regression_name):
+    try:
+        # Ensure features match those used during fit
+        if list(model.feature_names_in_) != list(X.columns):
+            missing_features = set(model.feature_names_in_) - set(X.columns)
+            unexpected_features = set(X.columns) - set(model.feature_names_in_)
+            raise ValueError(
+                f"Feature mismatch for {regression_name}:\n"
+                f"Missing features: {missing_features}\n"
+                f"Unexpected features: {unexpected_features}"
+            )
+
+        # Predict and calculate residuals
+        predictions = model.predict(X)
+        residuals = y - predictions
+
+        # Plot Residual Diagnostics
+        fig, axs = plt.subplots(1, 2, figsize=(12, 6))
+
+        # Residuals vs Fitted
+        sns.scatterplot(x=predictions, y=residuals, ax=axs[0], color="blue", alpha=0.6)
+        axs[0].axhline(0, color="red", linestyle="--", linewidth=1)
+        axs[0].set_title("Residuals vs Fitted")
+        axs[0].set_xlabel("Fitted Values")
+        axs[0].set_ylabel("Residuals")
+
+        # Histogram of Residuals
+        sns.histplot(residuals, kde=True, bins=20, ax=axs[1], color="blue", alpha=0.6)
+        axs[1].axhline(0, color="red", linestyle="--", linewidth=1)
+        axs[1].set_title("Distribution of Residuals")
+
+        st.pyplot(fig)
+    except Exception as e:
+        st.error(f"Error during residual diagnostics for {regression_name}: {e}")
 
 def prepare_binary_target(df, price_column='close'):
     df['price_change'] = (df[price_column].diff() > 0).astype(int)
@@ -324,6 +362,47 @@ def perform_random_forest(data, independent_vars, target_var='price_change'):
     y_pred = rf_model.predict(X_test)
     
     return rf_model
+
+#Heteroscedasticity Analysis
+
+def test_and_correct_heteroscedasticity(model, X, y, regression_name):
+    """
+    Test for heteroscedasticity using the Breusch-Pagan test and optionally correct it.
+    """ 
+
+    try:
+        # Add constant for the test
+        X_with_const = sm.add_constant(X)
+
+        # Residuals from the fitted model
+        residuals = y - model.predict(X)
+
+        # Perform Breusch-Pagan test
+        test_stat, p_value, _, _ = het_breuschpagan(residuals, X_with_const)
+        st.write(f"Breusch-Pagan Test for {regression_name}:")
+        st.write(f"Test Statistic: {test_stat:.4f}, p-value: {p_value:.4f}")
+
+        if p_value < 0.05:
+            st.warning(f"Heteroscedasticity detected for {regression_name}. Correcting using Weighted Least Squares (WLS)...")
+
+            # Correct for heteroscedasticity using WLS
+            weights = 1 / (residuals**2 + 1e-8)  # Avoid division by zero
+            X_weighted = X_with_const.multiply(weights, axis=0)
+            y_weighted = y.multiply(weights)
+
+            # Fit a Weighted Least Squares model
+            wls_model = sm.OLS(y_weighted, X_weighted).fit()
+            st.write(f"Corrected model for {regression_name}:")
+            st.write(wls_model.summary())
+            return wls_model
+        else:
+            st.success(f"No heteroscedasticity detected for {regression_name}. No correction needed.")
+            return model
+
+    except Exception as e:
+        st.error(f"Error during heteroscedasticity analysis for {regression_name}: {e}")
+        return None
+    
 
 # Function to display the results in Streamlit
 def display_analysis_results(regression_model, r2_score, event_impact, rf_model):
