@@ -3,6 +3,7 @@ import pandas as pd
 def clean_data(file_path, is_stock=False, rate_column='new_vaccinations_smoothed_per_million', threshold=0.05):
     if is_stock:
         data = pd.read_csv(file_path, header=2)
+        data = data.iloc[:, :6] 
         data.columns = ['date', 'price', 'close', 'high', 'low', 'volume']
         data['date'] = pd.to_datetime(data['date'])
         data.set_index('date', inplace=True)
