@@ -8,84 +8,10 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.impute import SimpleImputer
 import streamlit as st
-from src.analysis import filter_data_around_events, plot_lag_correlations, prepare_binary_target, perform_logistic_regression, perform_random_forest, categorize_by_autocorrelation, calculate_feature_importance, apply_differencing, check_stationarity, reduce_multicollinearity, perform_multiple_linear_regression, add_lagged_features, perform_regression_and_plot, display_autocorrelation_categories, calculate_and_display_feature_importance, apply_differencing_and_display, display_stationarity_results, display_vif_results
-from src.visualization import plot_covid_cases, plot_stock_with_events, visualize_covid_data, plot_regression_results, plot_roc_curve, display_classification_report, plot_feature_importance, plot_interactive_time_series, plot_scatter_matrix, plot_interactive_heatmap
+from src.analysis import perform_and_display_regression, plot_residual_diagnostics_for_model, process_data_for_regressions, run_regression_analysis, filter_data_around_events, test_and_correct_heteroscedasticity, plot_lag_correlations, prepare_binary_target, perform_logistic_regression, perform_random_forest, categorize_by_autocorrelation, calculate_feature_importance, apply_differencing, check_stationarity, reduce_multicollinearity, perform_multiple_linear_regression, add_lagged_features, perform_regression_and_plot, display_autocorrelation_categories, calculate_and_display_feature_importance, apply_differencing_and_display, display_stationarity_results, display_vif_results
+from src.visualization import plot_coefficients, plot_residual_diagnostics, plot_covid_cases, plot_stock_with_events, visualize_covid_data, plot_regression_results, plot_roc_curve, display_classification_report, plot_feature_importance, plot_interactive_time_series, plot_scatter_matrix, plot_interactive_heatmap
 
-# Helper function for differencing and lagging variables
-def apply_lags_and_differencing(df, variables, lags, differencing=True):
-    for var in variables:
-        if var in df.columns:
-            diff_var = f"{var}_diff" if differencing else var
-            if differencing:
-                df[diff_var] = df[var].diff()
-            for lag in lags:
-                df[f"{diff_var}_lag_{lag}"] = df[diff_var].shift(lag)
-        else:
-            st.write(f"Warning: {var} not found in the data. Skipping.")
-    return df
-
-# Helper function for interaction term creation
-def create_interaction_terms(df):
-    df['new_cases_dummy_interaction'] = df['new_cases_smoothed_diff'] * df['Dummy_Variable']
-    df['new_deaths_dummy_interaction'] = df['new_deaths_smoothed_diff'] * df['Dummy_Variable']
-    return df
-
-# Helper function for plotting regression coefficients
-def plot_coefficients(coefficients_df, title="Feature Importance (Coefficients)"):
-    fig, ax = plt.subplots(figsize=(8, 6))
-    coefficients_df.plot.bar(x='Feature', y='Coefficient', legend=False, ax=ax)
-    plt.title(title)
-    plt.ylabel("Coefficient Value")
-    plt.xlabel("Features")
-    plt.xticks(rotation=45, ha='right')
-    st.pyplot(fig)
-
-# Perform linear regression
-def perform_and_display_regression(df, dependent_var, independent_vars):
-    regression_model, r2_score = perform_multiple_linear_regression(df, dependent_var, independent_vars)
-    st.markdown(f"**R² Score:** {r2_score:.4f}")
-    
-    coefficients_df = pd.DataFrame({
-        'Feature': regression_model.feature_names_in_,
-        'Coefficient': regression_model.coef_
-    }).sort_values(by='Coefficient', ascending=False)
-    
-    st.table(coefficients_df)
-    plot_coefficients(coefficients_df)
-    
-    st.markdown(f"**Intercept:** {regression_model.intercept_:.4f}")
-    return regression_model
-
-# Helper function for residual diagnostics
-def plot_residual_diagnostics_for_model(df, independent_vars, dependent_var, model_name="Regression"):
-    try:
-        st.write(f"Analyzing residuals for {model_name} ...")
-        X = df[independent_vars]
-        y = df[dependent_var]
-        
-        # Align data to ensure compatibility
-        X_aligned, y_aligned = align_data(X, y)
-        
-        # Perform the regression
-        model, _ = perform_multiple_linear_regression(df, dependent_var, independent_vars)
-        
-        # Plot residual diagnostics
-        plot_residual_diagnostics(model, X_aligned, y_aligned, model_name)
-    except Exception as e:
-        st.error(f"Error during residual diagnostics for {model_name}: {e}")
-
-# Apply differencing and lags to the variables
-def process_data_for_regressions(df, short_lags, long_lags):
-    reg1_vars_short_lag = ['new_cases_smoothed', 'new_deaths_smoothed']
-    reg1_vars_long_lag = ['vaccination_signal', 'reproduction_rate', 'new_vaccinations_smoothed', 'Dummy_Variable']
-    
-    df = apply_lags_and_differencing(df, reg1_vars_short_lag, short_lags)
-    df = apply_lags_and_differencing(df, reg1_vars_long_lag, long_lags)
-    
-    df = create_interaction_terms(df)
-    
-    return df
-
+            
 def introduction_tab(merged_data, events, covid_data):
     st.header("Introduction")
     st.write("""
@@ -233,42 +159,42 @@ def analysis_tab(merged_data, events):
         
     except KeyError as e:
         st.error(f"Error during stationarity and multicollinearity analysis: {e}")
-
+    
+    # Data loading and filtering
+    short_lags = [1]  # Only 1 day for short-term
+    long_lags = [180]  # Only 180 days for long-term
+        
+    # Process data with differencing and lags
+    filtered_data = process_data_for_regressions(filtered_data, short_lags, long_lags)
+    reg1_independent_vars = (
+            [f"{var}_diff_lag_{lag}" for var in ['new_cases_smoothed', 'new_deaths_smoothed'] for lag in short_lags] +
+            [f"{var}_diff_lag_{lag}" for var in ['vaccination_signal', 'reproduction_rate', 'new_vaccinations_smoothed', 'Dummy_Variable'] for lag in long_lags] +
+            ['new_cases_dummy_interaction', 'new_deaths_dummy_interaction']
+    )
+    reg2_independent_vars = (
+            [f"reproduction_rate_vaccinations_diff_lag_{lag}" for lag in short_lags] +
+            [f"{var}_diff_lag_{lag}" for var in ['vaccination_signal', 'Dummy_Variable'] for lag in long_lags] +
+            ['deaths_to_cases_ratio', 'new_cases_dummy_interaction', 'new_deaths_dummy_interaction']
+    )
+    independent_vars = ['new_cases_smoothed', 'Dummy_Variable', 'stringency_index'] 
+    independent_vars += ['new_cases_dummy_interaction', 'total_vaccination_rate', 'female_smokers_rate']
+    
     try:
-         # Data loading and filtering
         st.header("Add Lag Variables")
         st.write("""
             Given the high correlation in most of our variables and the characteristics of our analysis, we decided to create lag variables. Lag variables account for the time delay between a predictor variable and its effect on the dependent variable (stock returns). We believe that this is highly relevant for variables like vaccinations that take time to impact COVID-19 metrics, which in turn may influence Pfizer's stock performance.
         """)
 
-        short_lags = [1]  # Only 1 day for short-term
-        long_lags = [180]  # Only 180 days for long-term
-        
-        # Process data with differencing and lags
-        filtered_data = process_data_for_regressions(filtered_data, short_lags, long_lags)
-        
         # First Linear Regression
         st.header("First Linear Regression")
-        reg1_independent_vars = (
-            [f"{var}_diff_lag_{lag}" for var in ['new_cases_smoothed', 'new_deaths_smoothed'] for lag in short_lags] +
-            [f"{var}_diff_lag_{lag}" for var in ['vaccination_signal', 'reproduction_rate', 'new_vaccinations_smoothed', 'Dummy_Variable'] for lag in long_lags] +
-            ['new_cases_dummy_interaction', 'new_deaths_dummy_interaction']
-        )
         regression_model = perform_and_display_regression(filtered_data, dependent_var='daily_return', independent_vars=reg1_independent_vars)
         
         # Second Linear Regression
         st.header("Second Linear Regression")
-        reg2_independent_vars = (
-            [f"reproduction_rate_vaccinations_lag_{lag}" for lag in short_lags] +
-            [f"{var}_lag_{lag}" for var in ['vaccination_signal', 'Dummy_Variable'] for lag in long_lags] +
-            ['deaths_to_cases_ratio', 'new_cases_dummy_interaction', 'new_deaths_dummy_interaction']
-        )
         regression_model = perform_and_display_regression(filtered_data, dependent_var='daily_return', independent_vars=reg2_independent_vars)
         
         # Third Linear Regression
         st.header("Third Linear Regression")
-        independent_vars = ['new_cases_smoothed', 'Dummy_Variable', 'stringency_index'] 
-        independent_vars += ['new_cases_dummy_interaction', 'total_vaccination_rate', 'female_smokers_rate']
         regression_model = perform_and_display_regression(filtered_data, dependent_var='new_deaths_smoothed', independent_vars=independent_vars)
         
         # Residual Diagnostics for each regression
@@ -278,36 +204,25 @@ def analysis_tab(merged_data, events):
         plot_residual_diagnostics_for_model(filtered_data, independent_vars, 'new_deaths_smoothed', model_name="Third Regression")
     except KeyError as e:
         st.error(f"Error during analysis: {e}")
-        
-    try:
-        merged_data = prepare_binary_target(filtered_data, price_column='close') 
-        independent_vars = ['new_vaccinations_smoothed', 'new_deaths_smoothed', 'new_cases_smoothed', 'Dummy_Variable']
+    
+    
+        # Heteroscedasticity Analysis
+    st.header("Heteroscedasticity Analysis")
+    st.write("Testing for heteroscedasticity in the regression models and applying corrections if needed...")
 
-        merged_data = merged_data.dropna(subset=independent_vars + ['target'])
-        # imputer = SimpleImputer(strategy='mean')
-        # merged_data[independent_vars] = imputer.fit_transform(merged_data[independent_vars])
 
-        # Perform logistic regression
-        log_model, log_acc, log_fpr, log_tpr, log_roc_auc = perform_logistic_regression(
-            merged_data, independent_vars
-        )
-        st.write(f"Logistic Regression Accuracy: {log_acc}")
-        # Display the classification report for logistic regression
-        log_y_true = merged_data['target']
-        log_y_pred = log_model.predict(merged_data[independent_vars])
-        display_classification_report(log_y_true, log_y_pred, model_name="Logistic Regression")
-        plot_roc_curve(log_fpr, log_tpr, log_roc_auc, title="Logistic Regression ROC Curve")
+    # Running regression analyses
+    run_regression_analysis(filtered_data, 'daily_return', reg1_independent_vars, "First Regression")
+    run_regression_analysis(filtered_data, 'daily_return', reg2_independent_vars, "Second Regression")
+    run_regression_analysis(filtered_data, 'new_deaths_smoothed', independent_vars, "Third Regression")
 
-        # Perform random forest
-        rf_model, rf_acc, rf_fpr, rf_tpr, rf_roc_auc = perform_random_forest(merged_data, independent_vars)
-        st.write(f"Random Forest Accuracy: {rf_acc}")
-        # Display the classification report for random forest
-        rf_y_true = merged_data['target']
-        rf_y_pred = rf_model.predict(merged_data[independent_vars])
-        display_classification_report(rf_y_true, rf_y_pred, model_name="Random Forest")
-        plot_roc_curve(rf_fpr, rf_tpr, rf_roc_auc, title="Random Forest ROC Curve")
-    except KeyError as e:
-        st.error(f"Error during analysis: {e}")
+    # Interpretation of heteroscedasticity results
+    st.write("""
+    The test statistic and p-values (0.0002, 0.0021, and 0.0000 for the first, second, and third regressions, respectively) indicate heteroscedasticity is present in the residuals of the third regression. 
 
-        
-  
+    Heteroscedasticity implies that the variance of the residuals is not constant, violating a key assumption of OLS. To address this, Weighted Least Squares (WLS) was applied, yielding the following insights:
+
+    - **High R² (uncentered):** Indicates the model explains almost all the variation in the dependent variable. However, caution is needed due to potential multicollinearity or numerical issues.
+    - **Significant coefficients:** All predictors have very low p-values (<0.05), suggesting they are statistically significant.
+    """)
+

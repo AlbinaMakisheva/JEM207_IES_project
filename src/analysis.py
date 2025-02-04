@@ -14,6 +14,11 @@ from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import accuracy_score, classification_report, roc_curve, auc
 import numpy as np
+import logging
+from src.process_data import apply_lags_and_differencing, create_interaction_terms
+from src.visualization import plot_coefficients, align_data, plot_residual_diagnostics
+
+logging.basicConfig(level=logging.INFO)
 
 # Filter data around key events
 def filter_data_around_events(data, events, window_months=1, date_column='date'):
@@ -32,8 +37,16 @@ def filter_data_around_events(data, events, window_months=1, date_column='date')
 
 # Perform regression analysis
 def perform_multiple_linear_regression(data, dependent_var, independent_vars):
-    if any(var not in data.columns for var in independent_vars) or dependent_var not in data.columns:
-        raise KeyError("Missing required columns for regression.")
+    # Check for missing columns and log them
+    missing_vars = [var for var in independent_vars if var not in data.columns]
+    if dependent_var not in data.columns:
+        missing_vars.append(dependent_var)
+    
+    if missing_vars:
+        logging.error(f"Missing required columns for regression: {', '.join(missing_vars)}")
+        raise KeyError(f"Missing required columns for regression: {', '.join(missing_vars)}")
+    
+    # Perform regression
     regression_data = data[[dependent_var] + independent_vars].dropna()
     X = regression_data[independent_vars]
     y = regression_data[dependent_var]
@@ -45,6 +58,24 @@ def perform_multiple_linear_regression(data, dependent_var, independent_vars):
     
     return model, r2_score
 
+# Helper function for residual diagnostics
+def plot_residual_diagnostics_for_model(df, independent_vars, dependent_var, model_name="Regression"):
+    try:
+        st.write(f"Analyzing residuals for {model_name} ...")
+        X = df[independent_vars]
+        y = df[dependent_var]
+        
+        # Align data to ensure compatibility
+        X_aligned, y_aligned = align_data(X, y)
+        
+        # Perform the regression
+        model, _ = perform_multiple_linear_regression(df, dependent_var, independent_vars)
+        
+        # Plot residual diagnostics
+        plot_residual_diagnostics(model, X_aligned, y_aligned, model_name)
+    except Exception as e:
+        st.error(f"Error during residual diagnostics for {model_name}: {e}")  
+        
 # Analyze the impact of events on stock returns
 def analyze_event_impact(merged_data, events, window_size):
     results = {}
@@ -294,45 +325,6 @@ def reduce_multicollinearity(data, threshold=10):
     
     return vif_data
 
-def perform_and_display_regression(df, dependent_var, independent_vars):
-    # Check if required columns exist
-    missing_cols = [var for var in independent_vars if var not in df.columns]
-    if dependent_var not in df.columns:
-        missing_cols.append(dependent_var)
-
-    if missing_cols:
-        st.write(f"Error: Missing columns for regression: {missing_cols}")
-        return  
-    
-    # Drop NaN values 
-    regression_data = df[[dependent_var] + independent_vars].dropna()
-    
-    # Perform regression
-    try:
-        regression_model, r2_score, summary = perform_multiple_linear_regression(regression_data, dependent_var, independent_vars)
-        
-        st.subheader("Regression Results")
-        st.markdown(f"**R² Score:** {r2_score:.4f}")
-        st.text(summary)
-        
-        coefficients_df = pd.DataFrame({
-            'Feature': regression_model.params.index,
-            'Coefficient': regression_model.params.values
-        }).sort_values(by='Coefficient', ascending=False)
-        st.table(coefficients_df)
-
-        fig, ax = plt.subplots(figsize=(8, 6))
-        coefficients_df.plot.bar(x='Feature', y='Coefficient', legend=False, ax=ax)
-        plt.title("Feature Importance (Coefficients)")
-        plt.ylabel("Coefficient Value")
-        plt.xlabel("Features")
-        plt.xticks(rotation=45, ha='right')
-        st.pyplot(fig)
-        
-    except Exception as e:
-        st.write(f"Error during analysis: {e}")
-
-
 
 # Add lag variables
 def add_lagged_features(data, short_lag_vars, long_lag_vars):
@@ -447,4 +439,97 @@ def display_vif_results(data):
     
     st.write("### Variance Inflation Factor (VIF):")
     st.table(vif_results)
+
+
+#Heteroscedasticity Analysis
+
+def test_and_correct_heteroscedasticity(model, X, y, regression_name):
+    """
+    Test for heteroscedasticity using the Breusch-Pagan test and optionally correct it.
+    """ 
+
+    try:
+        # Add constant for the test
+        X_with_const = sm.add_constant(X)
+
+        # Residuals from the fitted model
+        residuals = y - model.predict(X)
+
+        # Perform Breusch-Pagan test
+        test_stat, p_value, _, _ = het_breuschpagan(residuals, X_with_const)
+        st.write(f"Breusch-Pagan Test for {regression_name}:")
+        st.write(f"Test Statistic: {test_stat:.4f}, p-value: {p_value:.4f}")
+
+        if p_value < 0.05:
+            st.warning(f"Heteroscedasticity detected for {regression_name}. Correcting using Weighted Least Squares (WLS)...")
+
+            # Correct for heteroscedasticity using WLS
+            weights = 1 / (residuals**2 + 1e-8)  # Avoid division by zero
+            X_weighted = X_with_const.multiply(weights, axis=0)
+            y_weighted = y.multiply(weights)
+
+            # Fit a Weighted Least Squares model
+            wls_model = sm.OLS(y_weighted, X_weighted).fit()
+            st.write(f"Corrected model for {regression_name}:")
+            st.write(wls_model.summary())
+            return wls_model
+        else:
+            st.success(f"No heteroscedasticity detected for {regression_name}. No correction needed.")
+            return model
+
+    except Exception as e:
+        st.error(f"Error during heteroscedasticity analysis for {regression_name}: {e}")
+        return None
+
+# Apply differencing and lags to the variables
+def process_data_for_regressions(df, short_lags, long_lags):
+    reg1_vars_short_lag = ['new_cases_smoothed', 'new_deaths_smoothed', 'reproduction_rate_vaccinations']
+    reg1_vars_long_lag = ['vaccination_signal', 'reproduction_rate', 'new_vaccinations_smoothed', 'Dummy_Variable']
+    df['reproduction_rate_vaccinations'] = (
+        df['reproduction_rate'] * df['vaccination_signal']
+    )
+    df = apply_lags_and_differencing(df, reg1_vars_short_lag, short_lags)
+    df = apply_lags_and_differencing(df, reg1_vars_long_lag, long_lags)
+    df = create_interaction_terms(df)
+    
+    return df
+
+# Function to perform regression analysis and test for heteroscedasticity
+def run_regression_analysis(filtered_data, dependent_var, independent_vars, regression_name):
+    try:
+        st.subheader(f"{regression_name}")
+        # Perform regression
+        regression_model, r2_score = perform_multiple_linear_regression(
+            filtered_data, dependent_var=dependent_var, independent_vars=independent_vars
+        )
+        st.write(f"R² Score for {regression_name}: {r2_score:.4f}")
+
+        # Prepare data for heteroscedasticity testing
+        X = filtered_data[independent_vars].dropna()
+        y = filtered_data[dependent_var].loc[X.index]
+        X, y = X.align(y, join="inner", axis=0)
+
+        # Test and correct heteroscedasticity
+        test_and_correct_heteroscedasticity(regression_model, X, y, regression_name)
+        
+    except Exception as e:
+        st.error(f"Error during heteroscedasticity analysis for {regression_name}: {e}")
+        
+
+# Perform linear regression
+def perform_and_display_regression(df, dependent_var, independent_vars):
+    regression_model, r2_score = perform_multiple_linear_regression(df, dependent_var, independent_vars)
+    st.markdown(f"**R² Score:** {r2_score:.4f}")
+    
+    coefficients_df = pd.DataFrame({
+        'Feature': regression_model.feature_names_in_,
+        'Coefficient': regression_model.coef_
+    }).sort_values(by='Coefficient', ascending=False)
+    
+    st.table(coefficients_df)
+    plot_coefficients(coefficients_df)
+    
+    st.markdown(f"**Intercept:** {regression_model.intercept_:.4f}")
+    return regression_model
+
 

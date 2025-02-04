@@ -1,10 +1,22 @@
 import pandas as pd
+import os
+
 
 def clean_data(file_path, is_stock=False, rate_column='new_vaccinations_smoothed_per_million', threshold=0.05):
     if is_stock:
-        data = pd.read_csv(file_path, header=2)
-        data = data.iloc[:, :6] 
-        data.columns = ['date', 'price', 'close', 'high', 'low', 'volume']
+        data = pd.read_csv(file_path)
+        cleaned_file_path = 'data/cleaned/pfizer_stock_cleaned.csv'
+        os.makedirs(os.path.dirname(cleaned_file_path), exist_ok=True)
+        
+        # Keep only required columns
+        required_columns = ['Price', 'Close', 'High', 'Low', 'Open', 'Volume']
+        stock_data = data[required_columns]
+
+        # Save cleaned data
+        stock_data.to_csv(cleaned_file_path, index=False, header=2)
+        
+        data = pd.read_csv(cleaned_file_path, header=2)
+        data.columns = ['date', 'close', 'high', 'low', 'open', 'volume']
         data['date'] = pd.to_datetime(data['date'])
         data.set_index('date', inplace=True)
         data['daily_return'] = data['close'].pct_change()
