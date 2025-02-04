@@ -18,10 +18,10 @@ def initialize_app():
     }
 
     if not os.path.exists(COVID_FILE):
-        fetch_covid_data(COVID_FILE)
+        fetch_covid_data()
 
     if not os.path.exists(STOCK_FILE):
-        fetch_stock_data(STOCK_FILE)
+        fetch_stock_data()
 
     covid_data = clean_data(COVID_FILE)
     stock_data = clean_data(STOCK_FILE, is_stock=True)
