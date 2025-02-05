@@ -89,6 +89,55 @@ def visualize_covid_data(data, output_path='./visualizations/covid_trends.png'):
     plt.tight_layout()
     st.pyplot(plt) 
 
+#Interactive Time Series 
+
+def plot_interactive_time_series(data, date_column='date', default_vars=None):
+    if default_vars is None:
+        default_vars = ['new_cases_smoothed', 'new_deaths_smoothed', 'gdp_per_capita', 'stringency_index', 'new_vaccinations_smoothed']
+    
+    # Allow users to select variables to plot
+    st.header("Interactive Time Series Exploration")
+    st.write("Select variables to plot and explore trends interactively.")
+    
+    variables = st.multiselect(
+        "Select Variables to Plot",
+        data.columns.tolist(),
+        default=default_vars
+    )
+    
+    scale_type = st.radio("Select Scale Type:", ["Linear", "Logarithmic"], index=0)
+    
+    # Normalization option
+    normalize = st.checkbox("Normalize Data (Min-Max Scaling)", value=False)
+    
+    if variables:
+        # Normalize data
+        if normalize:
+            data[variables] = data[variables].apply(
+                lambda x: (x - x.min()) / (x.max() - x.min()) if x.max() != x.min() else x
+            )
+        
+        fig = px.line(
+            data,
+            x=date_column,
+            y=variables,
+            title="Interactive Time Series Exploration",
+            labels={date_column: "Date"},
+            markers=True
+        )
+        
+        if scale_type == "Logarithmic":
+            fig.update_layout(yaxis_type="log")
+        
+        fig.update_layout(
+            xaxis_title="Date",
+            yaxis_title="Values",
+            legend_title="Variables",
+            template="plotly_white"
+        )
+        st.plotly_chart(fig)
+    else:
+        st.write("Please select at least one variable to plot.")
 
 def plot_regression_results(coefficients, intercept, r2_score, feature_names, output_path='./visualizations/regression_results.png'):
     if len(coefficients) != len(feature_names):
