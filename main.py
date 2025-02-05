@@ -213,84 +213,12 @@ def main():
 
             # First Linear Regression
             st.header("First Linear Regression")
-
-            # Apply differencing and lagging to selected variables
-            reg1_vars_short_lag = ['new_cases_smoothed', 'new_deaths_smoothed']
-            reg1_vars_long_lag = ['vaccination_signal', 'reproduction_rate', 'new_vaccinations_smoothed', 'Dummy_Variable']
-
-            st.write("Applying differencing and lagging to selected variables...")
-            short_lags = [1]  # Only 1 day for short-term
-            long_lags = [180]  # Only 180 days for long-term
-
-            # Apply differencing and short lags to short-term variables
-            for var in reg1_vars_short_lag:
-                if var in filtered_data.columns:
-                    diff_var = f"{var}_diff"
-                    filtered_data[diff_var] = filtered_data[var].diff()
-                    for lag in short_lags:
-                        filtered_data[f"{diff_var}_lag_{lag}"] = filtered_data[diff_var].shift(lag)
-                else:
-                    st.write(f"Warning: {var} not found in the data. Skipping.")
-
-            # Apply differencing and long lags to long-term variables
-            for var in reg1_vars_long_lag:
-                if var in filtered_data.columns:
-                    diff_var = f"{var}_diff"
-                    filtered_data[diff_var] = filtered_data[var].diff()
-                    for lag in long_lags:
-                        filtered_data[f"{diff_var}_lag_{lag}"] = filtered_data[diff_var].shift(lag)
-                else:
-                    st.write(f"Warning: {var} not found in the data. Skipping.")
-
-            filtered_data = filtered_data.iloc[1:]  # Removes the first row affected by differencing
-
-            # Create interaction terms
-            filtered_data['new_cases_dummy_interaction'] = (
-                filtered_data['new_cases_smoothed_diff'] * filtered_data['Dummy_Variable']
-            )
-
-            filtered_data['new_deaths_dummy_interaction'] = (
-                filtered_data['new_deaths_smoothed_diff'] * filtered_data['Dummy_Variable']
-            )
-
-            reg1_independent_vars = (
-                [f"{var}_diff_lag_{lag}" for var in reg1_vars_short_lag for lag in short_lags] +
-                [f"{var}_diff_lag_{lag}" for var in reg1_vars_long_lag for lag in long_lags] +
-                ['new_cases_dummy_interaction', 'new_deaths_dummy_interaction']
-            )
-
-            # Perform regression
-            regression_model, r2_score = perform_multiple_linear_regression(
-                filtered_data,
-                dependent_var='daily_return',
-                independent_vars=reg1_independent_vars
-            )
-
-            st.subheader("First Regression Results")
-            st.markdown(f"**R² Score:** {r2_score:.4f}")
-            coefficients_df = pd.DataFrame({
-                'Feature': regression_model.feature_names_in_,
-                'Coefficient': regression_model.coef_
-            }).sort_values(by='Coefficient', ascending=False)
-            st.table(coefficients_df)
-
-            # Plot Coefficients
-            st.markdown("**Feature Importance (Coefficients):**")
-            fig, ax = plt.subplots(figsize=(8, 6))
-            coefficients_df.plot.bar(
-                x='Feature', y='Coefficient', legend=False, ax=ax
-            )
-            plt.title("Feature Importance (Coefficients)")
-            plt.ylabel("Coefficient Value")
-            plt.xlabel("Features")
-            plt.xticks(rotation=45, ha='right')
-            st.pyplot(fig)
-
-            # Intercept
-            st.markdown(f"**Intercept:** {regression_model.intercept_:.4f}")
-
-            # Second Linear Regression
-            st.header("Second Linear Regression")
+            st.latex(r"""
+            \text{daily return} = \beta_0 + \beta_1 (\text{reproduction_rate_vaccinations}_{t-1}) + 
+            \beta_2 (\Delta \text{vaccination_signal}_{t-180}) + \beta_3 (\text{Dummy_Variable}_{t-180}) + 
+            \beta_4 (\text{deaths_to_cases_ratio}) + \beta_5 (\text{new_cases_dummy_interaction}) +
+            \beta_6 (\text{new_deaths_dummy_interaction}) + \epsilon
+            """)
 
             # Create additional interaction terms
             filtered_data['new_cases_dummy_interaction'] = (
@@ -310,6 +238,9 @@ def main():
                 filtered_data['new_deaths_smoothed'] * filtered_data['Dummy_Variable']
             )
 
+            st.write("Applying differencing and lagging to selected variables...")
+            short_lags = [1]  # Only 1 day for short-term
+            long_lags = [180]  # Only 180 days for long-term
 
             reg2_vars_short_lag = ['reproduction_rate_vaccinations']
             reg2_vars_long_lag = ['vaccination_signal', 'Dummy_Variable']
@@ -342,7 +273,7 @@ def main():
                 independent_vars=reg2_independent_vars
             )
 
-            st.subheader("Second Regression Results")
+            st.subheader("First Regression Results")
             st.markdown(f"**R² Score:** {r2_score:.4f}")
             coefficients_df = pd.DataFrame({
                 'Feature': regression_model.feature_names_in_,
@@ -350,24 +281,37 @@ def main():
             }).sort_values(by='Coefficient', ascending=False)
             st.table(coefficients_df)
 
-            # Plot Coefficients
-            st.markdown("**Feature Importance (Coefficients):**")
-            fig, ax = plt.subplots(figsize=(8, 6))
-            coefficients_df.plot.bar(
-                x='Feature', y='Coefficient', legend=False, ax=ax
-            )
-            plt.title("Feature Importance (Coefficients)")
-            plt.ylabel("Coefficient Value")
-            plt.xlabel("Features")
-            plt.xticks(rotation=45, ha='right')
-            st.pyplot(fig)
 
             # Intercept
             st.markdown(f"**Intercept:** {regression_model.intercept_:.4f}")
 
+            st.write("""
+                The coefficient of determination of 0.0053 indicates that only 0.53% of the variation in daily returns is explained by the independent variables. The model does not have strong predictive power.
+                     
+                Regarding the interpretation of the coefficients:
+                     
+                    > The intercept (baseline return) suggests that even in the absence of pandemic-related factors (all independent variables being equal to zero), the Pfizer stock would still have a small expected daily return of 0.06%
+                     
+                    > new_cases_dummy_interaction: A small positive effect of new cases when interacting with the dummy variable. Suggests that an increase in cases under certain conditions (e.g., lockdown or event dates) is associated with a slight increase in returns.
+                     
+                    > reproduction_rate_vaccinations_lag_1 and vaccination_signal_lag_180: No meaningful effect of when combined with vaccinations (possibly due to multicollinearity).
 
-            # Third Linear Regression
-            st.header("Third Linear Regression")
+                    > deaths_to_cases_ratio: A higher ratio of deaths to cases is negatively correlated with stock returns, which is expected as worsening pandemic conditions may negatively affect the market. However, the magnitude is small.
+                     
+                    > new_deaths_dummy_interaction: A small negative effect of new deaths when interacting with the dummy variable, suggesting that under specific conditions, higher deaths are associated with a slight decline in stock prices.
+                     
+                    > Dummy_Variable_lag_180: A negative impact of the event dummy variable on stock returns when lagged 180 days. Suggests that certain events had a slightly negative influence over the long term.
+                    
+                
+            """)
+
+            # Second Linear Regression
+            st.header("Second Linear Regression")
+            st.latex(r"""
+            \text{new_deaths_smoothed} = \beta_0 + \beta_1 (\text{new_cases_smoothed}) + \beta_2 (\text{Dummy_Variable}) +
+            \beta_3 (\text{stringency_index}) + \beta_4 (\text{new_cases_dummy_interaction}) +
+            \beta_5 (\text{total_vaccination_rate}) + \beta_6 (\text{female_smokers_rate}) + \epsilon
+            """)
 
             independent_vars = ['new_cases_smoothed', 'Dummy_Variable', 'stringency_index'] 
 
@@ -408,20 +352,28 @@ def main():
             st.markdown("**Coefficients:**")
             st.table(coefficients_df)
 
-            # Plot Coefficients
-            st.markdown("**Feature Importance (Coefficients):**")
-            fig, ax = plt.subplots(figsize=(8, 6))
-            coefficients_df.plot.bar(
-                x='Feature', y='Coefficient', legend=False, ax=ax
-            )
-            plt.title("Feature Importance (Coefficients)")
-            plt.ylabel("Coefficient Value")
-            plt.xlabel("Features")
-            plt.xticks(rotation=45, ha='right')
-            st.pyplot(fig)
-
             # Intercept
             st.markdown(f"**Intercept:** {regression_model.intercept_:.4f}")
+
+            st.write("""
+                The coefficient of determination of 0.7482 mean that 74.82% of the variation in new deaths is explained by the independent variables, which is a strong explanatory model. In this case, we only use the covid_dataset.
+                     
+                Regarding the interpretation of the coefficients:
+                     
+                    > The intercept (baseline return) doesn't have a real-world meaning because it assumes an unrealistic scenario.
+                     
+                    > new_cases_smoothed: A strong positive correlation between new cases and new deaths. This aligns with expectations since more infections lead to more fatalities.
+                     
+                    > female_smokers_rate: A positive relationship between female smoking rates and deaths. This suggests that smoking may be a factor that worsens COVID-19 outcomes.
+
+                    > new_cases_dummy_interaction: A positive interaction effect between new cases and the dummy variable, indicating that for certain event periods, new cases are associated with higher deaths.
+                     
+                    > stringency_index: A small positive effect, suggesting that higher lockdown measures are linked to slightly higher deaths. This could be due to delayed reporting of deaths during strict lockdowns.
+                     
+                    > total_vaccination_rate: A strong negative correlation, indicating that higher vaccination rates significantly reduce the number of deaths.
+                    
+                    > Dummy_Variable: A negative coefficient, suggesting that for certain event periods, the number of deaths decreased (possibly due to intervention measures like lockdowns or vaccine rollouts).
+            """)
 
             # Residual Diagnostics for Linear Regressions
             st.header("Residual Diagnostics")
@@ -434,23 +386,9 @@ def main():
                 return aligned_data[X.columns], aligned_data[y.name]
 
             # Residuals for the first regression
+            
             try:
                 st.write("Analyzing residuals for the first regression ...")
-                # Define the independent and dependent variables
-                X_reg1 = filtered_data[reg1_independent_vars]
-                y_reg1 = filtered_data['daily_return']
-                # Align data
-                X_reg1_aligned, y_reg1_aligned = align_data(X_reg1, y_reg1)
-                # Perform the regression
-                model_reg1, _ = perform_multiple_linear_regression(filtered_data, 'daily_return', reg1_independent_vars)
-                # Plot residual diagnostics
-                plot_residual_diagnostics(model_reg1, X_reg1_aligned, y_reg1_aligned, "First Regression")
-            except Exception as e:
-                st.error(f"Error during residual diagnostics for First Regression: {e}")
-
-            # Residuals for the second regression
-            try:
-                st.write("Analyzing residuals for the second regression ...")
                 # Define the independent and dependent variables
                 X_reg2 = filtered_data[reg2_independent_vars]
                 y_reg2 = filtered_data['daily_return']
@@ -463,9 +401,9 @@ def main():
             except Exception as e:
                 st.error(f"Error during residual diagnostics for Second Regression: {e}")
 
-            # Residuals for the third regression
+            # Residuals for the second regression
             try:
-                st.write("Analyzing residuals for the third regression ...")
+                st.write("Analyzing residuals for the second regression ...")
                 # Define the independent and dependent variables
                 X_reg3 = filtered_data[independent_vars]
                 y_reg3 = filtered_data['new_deaths_smoothed']
@@ -483,12 +421,11 @@ def main():
             st.write("Observations from the Residual Diagnostics...")
 
             st.write("""
-                    In the first regression,the residuals seem relatively centered around 0, but there appears to be a pattern at lower fitted values.
-                    For the second regression, there is a noticeable clustering of residuals at certain ranges of fitted values. This indicates potential issues with heteroscedasticity (non-constant variance) or omitted variable bias.
-                    For the third regression, the residuals display a strong pattern,  which could be understood as a sign of heteroscedasticity.The variance of residuals increases with higher fitted values, indicating that the model struggles to capture variability at those levels.
+                    For the first regression, there is a noticeable clustering of residuals at certain ranges of fitted values. This indicates potential issues with heteroscedasticity (non-constant variance) or omitted variable bias.
+                    For the second regression, the residuals display a strong pattern,  which could be understood as a sign of heteroscedasticity.The variance of residuals increases with higher fitted values, indicating that the model struggles to capture variability at those levels.
                     In summary, through graphical visualization, the residuals appear to increase, indicating that they are not constant over time.
                     
-                    Regarding the Distribution of Residuals, the residuals of all three regressions are approximately normal but have visible tails or are slightly skewed. This indicates a reasonable fit but with room for improvement in capturing the underlying patterns.
+                    Regarding the Distribution of Residuals, the residuals of both regressions are approximately normal but have visible tails or are slightly skewed. This indicates a reasonable fit but with room for improvement in capturing the underlying patterns.
                     Given this, and to improve our regressions, we should apply the necessary corrections in order to restore the classical assumption of constant variance. It is also important to highlight that these procedures, while not fully resolving the problem of heteroscedasticity, restore the validity of statistical inference in large samples.
                     """)
            
@@ -501,33 +438,12 @@ def main():
                 # First Regression
                 st.subheader("First Regression")
                 # Perform regression to retrieve the model
-                regression_model_1, r2_score_1 = perform_multiple_linear_regression(
-                    filtered_data,
-                    dependent_var='daily_return',
-                    independent_vars=reg1_independent_vars
-                )
-                st.write(f"R² Score for First Regression: {r2_score_1:.4f}")
-
-                # Prepare data for heteroscedasticity testing
-                X_reg1 = filtered_data[reg1_independent_vars].dropna()
-                y_reg1 = filtered_data['daily_return'].loc[X_reg1.index]
-                X_reg1, y_reg1 = X_reg1.align(y_reg1, join="inner", axis=0)
-
-                # Test and correct for heteroscedasticity
-                test_and_correct_heteroscedasticity(regression_model_1, X_reg1, y_reg1, "First Regression")
-            except Exception as e:
-                st.error(f"Error during heteroscedasticity analysis for First Regression: {e}")
-
-            try:
-                # Second Regression
-                st.subheader("Second Regression")
-                # Perform regression to retrieve the model
                 regression_model_2, r2_score_2 = perform_multiple_linear_regression(
                     filtered_data,
                     dependent_var='daily_return',
                     independent_vars=reg2_independent_vars
                 )
-                st.write(f"R² Score for Second Regression: {r2_score_2:.4f}")
+                st.write(f"R² Score for first Regression: {r2_score_2:.4f}")
 
                 # Prepare data for heteroscedasticity testing
                 X_reg2 = filtered_data[reg2_independent_vars].dropna()
@@ -535,22 +451,22 @@ def main():
                 X_reg2, y_reg2 = X_reg2.align(y_reg2, join="inner", axis=0)
 
                 # Test and correct for heteroscedasticity
-                test_and_correct_heteroscedasticity(regression_model_2, X_reg2, y_reg2, "Second Regression")
+                test_and_correct_heteroscedasticity(regression_model_2, X_reg2, y_reg2, "First Regression")
             except Exception as e:
-                st.error(f"Error during heteroscedasticity analysis for Second Regression: {e}")
+                st.error(f"Error during heteroscedasticity analysis for first Regression: {e}")
 
             try:
                 
                 # Handle missing values for the third regression
-                st.subheader("Third Regression")
+                st.subheader("Second Regression")
                 X_reg3 = filtered_data[independent_vars]
                 y_reg3 = filtered_data['new_deaths_smoothed']
                 X_reg3 = X_reg3.dropna()
                 y_reg3 = y_reg3[X_reg3.index]
-                corrected_model_3 = test_and_correct_heteroscedasticity(regression_model, X_reg3, y_reg3, "Third Regression")
+                corrected_model_3 = test_and_correct_heteroscedasticity(regression_model, X_reg3, y_reg3, "Second Regression")
 
                 st.write("""
-                The test statistic and a p-value of 0.0002, 0.0021 and 0.0000 (for the first, second and third regression respectively), indicate heteroscedasticity is present in the residuals of the third regression. Heteroscedasticity implies that the variance of the residuals is not constant, violating a key assumption of ordinary least squares (OLS). Weighted Least Squares (WLS) was applied to address heteroscedasticity, and a corrected model was obtained.
+                The test statistic and a p-value of 0.0021 and 0.0000 (for the first and second regressions respectively), indicate heteroscedasticity is present in the residuals of the third regression. Heteroscedasticity implies that the variance of the residuals is not constant, violating a key assumption of ordinary least squares (OLS). Weighted Least Squares (WLS) was applied to address heteroscedasticity, and a corrected model was obtained.
                
                 The corrected model's results show:
                          
@@ -599,8 +515,33 @@ def main():
             scaled_extended_vars = scaler.fit_transform(merged_data[extended_independent_vars])
 
             # Perform extended logistic regression
+
+            st.latex(r"""
+            P(\text{target} = 1) = \frac{1}{1 + e^{-(\beta_0 + \beta_1 \text{new_vaccinations_smoothed} + \beta_2 \text{new_deaths_smoothed} + 
+            \beta_3 \text{new_cases_smoothed} + \beta_4 \text{Dummy_Variable} + \beta_5 \text{deaths_to_cases_ratio} + 
+            \beta_6 \text{interaction_term})}}
+            """)
         
             extended_logistic_model, X_test, y_test = perform_extended_logistic_regression(merged_data, extended_independent_vars, target_var='target')
+
+            st.write("""
+                This logistic regression model predicts the probability of Pfizer stock movement (increase or decrease) based on COVID-related variables.
+                     
+                Regarding the interpretation of the coefficients:
+                     
+                    > new_vaccinations_smoothed: No effect. Suggests that the rate of new vaccinations does not significantly influence stock movement.
+                               
+                    > new_deaths_smoothed: Negative effect: More deaths reduce the probability of stock increasing. A small but expected effect—worsening pandemic conditions may weaken investor confidence.
+
+                    > new_cases_smoothed: Positive effect: More cases slightly increase the probability of stock rising. This could reflect expectations of higher vaccine demand, benefiting Pfizer.
+                     
+                    > Dummy_Variable: Negative effect: If the dummy variable represents major COVID-related events (e.g., lockdowns, policy shifts), these tend to lower the likelihood of stock increase.
+                     
+                    > deaths_to_cases_ratio: Negative effect: A higher death-to-case ratio is associated with a lower probability of stock increase, possibly due to investor concerns about pandemic severity.
+                    
+                    > interaction_term: Strongest negative effect suggesting that in specific events (e.g., lockdowns, new variants), rising cases negatively impact stock movement.
+            """)
+
 
             # Display results extended logistic regression
             st.subheader("Extended Logistic Regression Results")
@@ -626,6 +567,7 @@ def main():
 
             st.markdown("### Model Performance Plots")
 
+
             # Calculate ROC Curve
             from sklearn.metrics import roc_curve, auc
 
@@ -650,28 +592,16 @@ def main():
             ax.legend(loc='lower right')
             st.pyplot(fig)
 
-            # Perform Random Forest classification
-            st.write("Performing Random Forest Classification...")
-            rf_model_2 = perform_random_forest(merged_data, extended_independent_vars)
+            st.write("""
+                > The accuracy of 0.5293 is slightly better than random guessing (50%), but still weak.
 
-            # Display the feature importance
-            feature_importance = pd.DataFrame({
-                'Feature': extended_independent_vars,  
-                'Importance': rf_model_2.feature_importances_
-            })
-            st.subheader("Random Forest Feature Importance")
-            st.table(feature_importance)
-
-            # Plot the feature importance
-            feature_importance.plot(kind='barh', x='Feature', y='Importance', legend=False)
-            plt.title('Random Forest Feature Importance')
-            plt.xlabel('Importance')
-            plt.ylabel('Feature')
-            plt.show()
-
-            feature_importance.plot(kind='barh', x='Feature', y='Importance')
-            st.pyplot(plt)
-
+                > The predictive power is very close to 50%, meaning the model struggles to distinguish stock movements effectively.    
+                     
+                > The ROC AUC close to 0.5 means the model is only slightly better than random in distinguishing stock movement directions.
+                     
+                > This logistic regression model is weak for stock prediction, and other financial or macroeconomic factors likely dominate Pfizer’s price movements.
+            """)
+            
             # Perform logistic regression with additional features with diff-lag
             st.write("Performing Logistic Regression with Extended Variables applying diff and lag...")
 
@@ -724,7 +654,16 @@ def main():
             merged_data = merged_data.dropna(subset=independent_vars + ['target'])
 
             # Perform logistic regression
-            st.write("Performing Logistic Regression...")
+           
+            st.write("Logistic Regression Equation with Differencing and Lagging")
+
+            st.latex(r"""
+            P(\text{target} = 1) = \frac{1}{1 + e^{-(\beta_0 + \beta_1 \Delta \text{new_cases_smoothed}_{t-1} + 
+            \beta_2 \Delta \text{new_deaths_smoothed}_{t-1} + \beta_3 \Delta \text{new_vaccinations_smoothed}_{t-180} + 
+            \beta_4 \Delta \text{Dummy_Variable}_{t-180} + \beta_5 \text{deaths_to_cases_ratio} + 
+            \beta_6 \text{interaction_term})}}
+            """)
+
             logistic_model = perform_logistic_regression(merged_data, independent_vars)
 
             # Display Logistic Regression Results
@@ -736,6 +675,24 @@ def main():
             st.markdown(f"**Intercept:** {logistic_model.intercept_}")
 
             st.markdown(f"**Accuracy on Test Data:** {logistic_model.score(merged_data[independent_vars], merged_data['target']):.4f}")
+
+            st.write("""
+                This logistic regression model predicts the probability of Pfizer stock increasing or decreasing, based on COVID-19-related factors, with differencing and lagging applied to some variables.
+                                        
+                Regarding the interpretation of the coefficients:
+                     
+                    > new_cases_smoothed_diff_lag_1: A positive effect, meaning that an increase in new cases (with a 1-day lag and differencing applied) increases the probability of stock price rising. This could reflect investor expectations of higher vaccine demand benefiting Pfizer.
+                               
+                    > new_deaths_smoothed_diff_lag_1: A negative effect, meaning that an increase in deaths (with a 1-day lag) slightly decreases the probability of stock rising.
+
+                    > new_vaccinations_smoothed_diff_lag_180: No significant effect on stock movement. This implies that long-term vaccination trends are already priced into the market and do not directly influence short-term stock price changes.
+                     
+                    > Dummy_Variable_diff_lag_180: A negative effect, meaning that the event dummy variable (with a 180-day lag) reduces the probability of stock increase. This suggests that major pandemic-related events (such as lockdowns or vaccine rollouts) tend to have a negative impact over the long term.
+                     
+                    > deaths_to_cases_ratio: A negative effect, meaning that a higher ratio of deaths to cases reduces the probability of stock price increase. This indicates that severe pandemic conditions negatively impact investor confidence.
+                    
+                    > interaction_term: Strongest positive effect, meaning that the interaction between new cases and the dummy variable significantly increases the probability of stock rising. This could imply that stock price increases are most likely in response to rising cases during specific pandemic events (e.g., vaccine approvals or policy changes).
+            """)
 
             from sklearn.metrics import classification_report
             y_true_logistic = merged_data['target']
@@ -765,29 +722,12 @@ def main():
             ax.legend(loc='lower right')
             st.pyplot(fig)
 
-            # Perform Random Forest classification
-            st.write("Performing Random Forest Classification...")
-            rf_model = perform_random_forest(merged_data, independent_vars)
-
-            # Display the feature importance
-            feature_importance = pd.DataFrame({
-                'Feature': independent_vars,  
-                'Importance': rf_model.feature_importances_
-            })
-            st.subheader("Random Forest Feature Importance")
-            st.table(feature_importance)
-
-            # Plot the feature importance
-            feature_importance.plot(kind='barh', x='Feature', y='Importance', legend=False)
-            plt.title('Random Forest Feature Importance')
-            plt.xlabel('Importance')
-            plt.ylabel('Feature')
-            plt.show()
-
-            feature_importance.plot(kind='barh', x='Feature', y='Importance')
-            st.pyplot(plt)
-
-
+            st.write("""
+                > The overall model performance analysis is biased towards predicting no stock increase (class 0), as seen by the high recall for class 0 (0.9846) and very low recall for class 1 (0.0177).
+                > ROC AUC of 0.4994 is almost exactly 0.5, meaning the model is no better than random guessing.
+                > Despite having an accuracy of 53.04%, the imbalance in recall suggests the model is failing to predict stock increases effectively.
+            """)
+            
 
         except Exception as e:
             st.error(f"An error occurred: {e}")
