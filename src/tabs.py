@@ -8,7 +8,7 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.impute import SimpleImputer
 import streamlit as st
-from src.analysis import perform_and_display_regression, plot_residual_diagnostics_for_model, process_data_for_regressions, run_regression_analysis, filter_data_around_events, test_and_correct_heteroscedasticity, plot_lag_correlations, prepare_binary_target, perform_logistic_regression, perform_random_forest, categorize_by_autocorrelation, calculate_feature_importance, apply_differencing, check_stationarity, reduce_multicollinearity, perform_multiple_linear_regression, add_lagged_features, perform_regression_and_plot, display_autocorrelation_categories, calculate_and_display_feature_importance, apply_differencing_and_display, display_stationarity_results, display_vif_results
+from src.analysis import perform_extended_logistic_regression, perform_and_display_regression, plot_residual_diagnostics_for_model, process_data_for_regressions, run_regression_analysis, filter_data_around_events, test_and_correct_heteroscedasticity, plot_lag_correlations, prepare_binary_target, perform_logistic_regression, perform_random_forest, categorize_by_autocorrelation, calculate_feature_importance, apply_differencing, check_stationarity, reduce_multicollinearity, perform_multiple_linear_regression, add_lagged_features, perform_regression_and_plot, display_autocorrelation_categories, calculate_and_display_feature_importance, apply_differencing_and_display, display_stationarity_results, display_vif_results
 from src.visualization import plot_coefficients, plot_residual_diagnostics, plot_covid_cases, plot_stock_with_events, visualize_covid_data, plot_regression_results, plot_roc_curve, display_classification_report, plot_feature_importance, plot_interactive_time_series, plot_scatter_matrix, plot_interactive_heatmap
 
             
@@ -225,4 +225,77 @@ def analysis_tab(merged_data, events):
     - **High R² (uncentered):** Indicates the model explains almost all the variation in the dependent variable. However, caution is needed due to potential multicollinearity or numerical issues.
     - **Significant coefficients:** All predictors have very low p-values (<0.05), suggesting they are statistically significant.
     """)
+    
+    try:
+        merged_data = prepare_binary_target(filtered_data, price_column='close') 
+        independent_vars = ['new_vaccinations_smoothed', 'new_deaths_smoothed', 'new_cases_smoothed', 'Dummy_Variable']
 
+        merged_data = merged_data.dropna(subset=independent_vars + ['target'])
+        # imputer = SimpleImputer(strategy='mean')
+        # merged_data[independent_vars] = imputer.fit_transform(merged_data[independent_vars])
+
+        # Perform logistic regression
+        log_model, log_acc, log_fpr, log_tpr, log_roc_auc = perform_logistic_regression(
+            merged_data, independent_vars
+        )
+        st.write(f"Logistic Regression Accuracy: {log_acc}")
+        # Display the classification report for logistic regression
+        log_y_true = merged_data['target']
+        log_y_pred = log_model.predict(merged_data[independent_vars])
+        display_classification_report(log_y_true, log_y_pred, model_name="Logistic Regression")
+        plot_roc_curve(log_fpr, log_tpr, log_roc_auc, title="Logistic Regression ROC Curve")
+
+        # Perform random forest
+        rf_model, rf_acc, rf_fpr, rf_tpr, rf_roc_auc = perform_random_forest(merged_data, independent_vars)
+        st.write(f"Random Forest Accuracy: {rf_acc}")
+        # Display the classification report for random forest
+        rf_y_true = merged_data['target']
+        rf_y_pred = rf_model.predict(merged_data[independent_vars])
+        display_classification_report(rf_y_true, rf_y_pred, model_name="Random Forest")
+        plot_roc_curve(rf_fpr, rf_tpr, rf_roc_auc, title="Random Forest ROC Curve")
+
+        # Extended logistic regression
+        # Add new features to the dataset
+        merged_data['deaths_to_cases_ratio'] = np.where(
+            merged_data['new_cases_smoothed'] == 0, 0,
+            merged_data['new_deaths_smoothed'] / merged_data['new_cases_smoothed']
+        )
+        merged_data['interaction_term'] = merged_data['new_cases_smoothed'] * merged_data['Dummy_Variable']
+
+
+        # Define the extended independent variables
+        extended_independent_vars = independent_vars + ['deaths_to_cases_ratio', 'interaction_term']
+
+        merged_data[extended_independent_vars] = merged_data[extended_independent_vars].replace([np.inf, -np.inf], np.nan).fillna(0)
+
+        # Handle missing or infinite values
+        merged_data[extended_independent_vars + ['target']] = merged_data[extended_independent_vars + ['target']].replace(
+            [np.inf, -np.inf], np.nan).fillna(0)  
+
+        # Ensure no extreme values exist
+        for col in extended_independent_vars:
+            merged_data[col] = np.clip(merged_data[col], a_min=-1e6, a_max=1e6)
+
+        # Standardize the independent variables
+        scaler = StandardScaler()
+        scaled_extended_vars = scaler.fit_transform(merged_data[extended_independent_vars])
+        
+        # Perform extended logistic regression
+        ext_log_model, ext_acc, ext_fpr, ext_tpr, ext_roc_auc, ext_coeffs, _ = perform_extended_logistic_regression(merged_data, extended_independent_vars)
+        st.write(f"Extended Logistic Regression Accuracy: {ext_acc}")
+        # Classification report for extended logistic regression
+        ext_y_true = merged_data['target']
+        ext_y_pred = ext_log_model.predict(merged_data[extended_independent_vars])
+        display_classification_report(ext_y_true, ext_y_pred, model_name="Extended Logistic Regression")
+        plot_roc_curve(ext_fpr, ext_tpr, ext_roc_auc, title="Extended Logistic Regression ROC Curve")
+
+        # Coefficients from the extended logistic regression model
+        st.write("Extended Logistic Regression Coefficients:")
+        extended_coef_df = pd.DataFrame({
+                'Feature': extended_independent_vars,
+                'Coefficient': ext_log_model.coef_[0]
+            })
+        st.table(extended_coef_df)
+
+    except KeyError as e:
+        st.error(f"KeyError encountered: {e}")
