@@ -341,12 +341,6 @@ def perform_extended_logistic_regression(data, extended_independent_vars, target
     
     return extended_logistic_model, X_test, y_test
 
-# Perform Random Forest classification
-def perform_random_forest(data, independent_vars, target_var='price_change'):
-    if target_var not in data.columns or not all(var in data.columns for var in independent_vars):
-        missing = [var for var in [target_var] + independent_vars if var not in data.columns]
-        raise KeyError(f"Missing columns: {', '.join(missing)} in the dataset.")
-
     # Prepare data for training
     rf_data = data[independent_vars + [target_var]].dropna()
     X = rf_data[independent_vars]
@@ -415,5 +409,3 @@ def display_analysis_results(regression_model, r2_score, event_impact, rf_model)
     st.subheader("Event Impact Analysis")
     st.write(event_impact)
     
-    st.subheader("Random Forest Feature Importance")
-    st.write(rf_model.feature_importances_)

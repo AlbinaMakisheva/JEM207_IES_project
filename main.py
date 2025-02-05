@@ -6,7 +6,7 @@ import plotly.express as px
 from src.data_cleaning import clean_data
 from src.data_merging import merge_data
 import matplotlib.pyplot as plt 
-from src.analysis import filter_data_around_events, plot_lag_correlations, categorize_by_autocorrelation, calculate_feature_importance, apply_differencing, check_stationarity, reduce_multicollinearity, perform_multiple_linear_regression, analyze_event_impact, prepare_binary_target, perform_logistic_regression, perform_extended_logistic_regression, perform_random_forest, plot_residual_diagnostics, test_and_correct_heteroscedasticity
+from src.analysis import filter_data_around_events, plot_lag_correlations, categorize_by_autocorrelation, calculate_feature_importance, apply_differencing, check_stationarity, reduce_multicollinearity, perform_multiple_linear_regression, analyze_event_impact, prepare_binary_target, perform_logistic_regression, perform_extended_logistic_regression, plot_residual_diagnostics, test_and_correct_heteroscedasticity
 from src.visualization import plot_covid_cases, plot_stock_with_events, visualize_covid_data, plot_regression_results, plot_interactive_time_series, plot_scatter_matrix, plot_interactive_heatmap
 from src.data_fetching import fetch_covid_data, fetch_stock_data
 from sklearn.metrics import accuracy_score, classification_report, roc_curve, auc
@@ -64,7 +64,7 @@ def main():
             The project involves multiple types of analyses:
             - **Regression Analysis:** We perform multiple linear regression to understand the relationships between stock prices and COVID-related variables.
             - **Event Impact Analysis:** We assess the direct impact of major events on stock returns.
-            - **Logistic Regression & Random Forest:** We build models to classify stock movements and identify important features.
+            - **Logistic Regression:** We build models to classify stock movements and identify important features.
 
             The datasets used in this analysis include global COVID-19 case data and stock price data for Pfizer. These datasets are combined to enable the analysis of event-driven changes in stock behavior.
         """)
@@ -120,85 +120,8 @@ def main():
                 - The filtered dataset will include data from **2020-11-08 to 2021-01-08**.
                 - **Applying this method to all events** creates a dataset segmented into **smaller windows**, allowing a **detailed analysis** of each event's impact.
                 """)
-
-        try:
-            # Perform autocorrelation analysis
-            st.write("Performing autocorrelation analysis...")
-            plot_lag_correlations(merged_data, lag=1)
-
-            st.write("""
-                With this analysis, we aim to investigate the autocorrelation between variables in order to help us building models that predict new trends. 
-                It is worth noticing that most variables namely total_cases, new_cases, new_cases_smoothed, total_deaths and new_deaths present high autocorrelation values. This indicate that many of our variables are highly dependent on their previous values at lag 1.
-                However, one could also argue that this is a common feature of cumulative variables (which give the cumulative sums over time) and smoothed variables (which are designed to reduce short-term fluctuations).
-                Nevertheless, we will focus on variables with much lower correlation, since they are the ones which might add much new information to our regressions.
-            """)
-        except KeyError as e:
-            st.error(f"Error during autocorrelation analysis: {e}")
-
-        try:
-            #Categorize variables by autocorrelation
-            st.write("Categorizing variables by autocorrelation...")
-
-            autocorrelation_categories = categorize_by_autocorrelation(merged_data, lag=1)
-
-            # Access the categorized variables
-            high_autocorrelation_vars = autocorrelation_categories['high']
-            moderate_autocorrelation_vars = autocorrelation_categories['moderate']
-            low_autocorrelation_vars = autocorrelation_categories['low']
-
-            # Display results in Streamlit
-            st.write("### Autocorrelation Categories")
-            st.write("#### High Autocorrelation Variables:")
-            st.write(high_autocorrelation_vars)
-            st.write("#### Moderate Autocorrelation Variables:")
-            st.write(moderate_autocorrelation_vars)
-            st.write("#### Low Autocorrelation Variables:")
-            st.write(low_autocorrelation_vars)
-
-            st.write("Select relevant variables based on importance...")
-
-            #Calculate feature importance using Random Forest
-            st.write("Calculating feature importance...")
-            feature_importance = calculate_feature_importance(merged_data, target_var='daily_return') 
-            st.write("Feature importance calculated:")
-            st.table(feature_importance)
-
-            top_variables = feature_importance['Feature'].head(10).tolist() 
-            critical_high_autocorrelation_vars = [var for var in high_autocorrelation_vars if var in top_variables]
-
-            st.write("Critical High Autocorrelation Variables:", critical_high_autocorrelation_vars)
-            
-            # Apply differencing to critical variables
-            st.write("Applying differencing to critical variables...")
-            merged_data = apply_differencing(merged_data, critical_high_autocorrelation_vars)
-
-            st.write("Differencing applied. New columns added:")
-            st.write([f'diff_{var}' for var in critical_high_autocorrelation_vars])
-
-        except KeyError as e:
-            st.error(f"Error during analysis: {e}")
-
-
-        try:
-            #Combine all variables for testing
-            test_variables = (
-                [f'diff_{var}' for var in critical_high_autocorrelation_vars] +
-                moderate_autocorrelation_vars +
-                low_autocorrelation_vars
-            )
-
-            #Check Stationarity on selected variables: Augmented Dickey-Fuller Test
-            st.write("Perfoming Stationarity...")
-            stationarity_results = check_stationarity(merged_data[test_variables])
-            st.table(stationarity_results)
-
-            # Reduce multicollinearity
-            st.write("Analyzing multicollinearity (VIF)...")
-            vif_results = reduce_multicollinearity(merged_data[test_variables], threshold=10)
-            st.table(vif_results)
+    
         
-        except KeyError as e:
-            st.error(f"Error during stationarity and multicollinearity analysis: {e}")
 
 
         try:
