@@ -121,7 +121,84 @@ def main():
                 - **Applying this method to all events** creates a dataset segmented into **smaller windows**, allowing a **detailed analysis** of each event's impact.
                 """)
     
+        try:
+            # Perform autocorrelation analysis
+            st.write("Performing autocorrelation analysis...")
+            plot_lag_correlations(merged_data, lag=1)
+
+            st.write("""
+                With this analysis, we aim to investigate the autocorrelation between variables in order to help us building models that predict new trends. 
+                It is worth noticing that most variables namely total_cases, new_cases, new_cases_smoothed, total_deaths and new_deaths present high autocorrelation values. This indicate that many of our variables are highly dependent on their previous values at lag 1.
+                However, one could also argue that this is a common feature of cumulative variables (which give the cumulative sums over time) and smoothed variables (which are designed to reduce short-term fluctuations).
+                Nevertheless, we will focus on variables with much lower correlation, since they are the ones which might add much new information to our regressions.
+            """)
+        except KeyError as e:
+            st.error(f"Error during autocorrelation analysis: {e}")
+
+        try:
+            #Categorize variables by autocorrelation
+            st.write("Categorizing variables by autocorrelation...")
+
+            autocorrelation_categories = categorize_by_autocorrelation(merged_data, lag=1)
+
+            # Access the categorized variables
+            high_autocorrelation_vars = autocorrelation_categories['high']
+            moderate_autocorrelation_vars = autocorrelation_categories['moderate']
+            low_autocorrelation_vars = autocorrelation_categories['low']
+
+            # Display results in Streamlit
+            st.write("### Autocorrelation Categories")
+            st.write("#### High Autocorrelation Variables:")
+            st.write(high_autocorrelation_vars)
+            st.write("#### Moderate Autocorrelation Variables:")
+            st.write(moderate_autocorrelation_vars)
+            st.write("#### Low Autocorrelation Variables:")
+            st.write(low_autocorrelation_vars)
+
+            st.write("Select relevant variables based on importance...")
+
+            #Calculate feature importance using Random Forest
+            st.write("Calculating feature importance...")
+            feature_importance = calculate_feature_importance(merged_data, target_var='daily_return') 
+            st.write("Feature importance calculated:")
+            st.table(feature_importance)
+
+            top_variables = feature_importance['Feature'].head(10).tolist() 
+            critical_high_autocorrelation_vars = [var for var in high_autocorrelation_vars if var in top_variables]
+
+            st.write("Critical High Autocorrelation Variables:", critical_high_autocorrelation_vars)
+            
+            # Apply differencing to critical variables
+            st.write("Applying differencing to critical variables...")
+            merged_data = apply_differencing(merged_data, critical_high_autocorrelation_vars)
+
+            st.write("Differencing applied. New columns added:")
+            st.write([f'diff_{var}' for var in critical_high_autocorrelation_vars])
+
+        except KeyError as e:
+            st.error(f"Error during analysis: {e}")
+
+
+        try:
+            #Combine all variables for testing
+            test_variables = (
+                [f'diff_{var}' for var in critical_high_autocorrelation_vars] +
+                moderate_autocorrelation_vars +
+                low_autocorrelation_vars
+            )
+
+            #Check Stationarity on selected variables: Augmented Dickey-Fuller Test
+            st.write("Perfoming Stationarity...")
+            stationarity_results = check_stationarity(merged_data[test_variables])
+            st.table(stationarity_results)
+
+            # Reduce multicollinearity
+            st.write("Analyzing multicollinearity (VIF)...")
+            vif_results = reduce_multicollinearity(merged_data[test_variables], threshold=10)
+            st.table(vif_results)
         
+        except KeyError as e:
+            st.error(f"Error during stationarity and multicollinearity analysis: {e}")
 
 
         try:
@@ -137,11 +214,14 @@ def main():
             # First Linear Regression
             st.header("First Linear Regression")
             st.latex(r"""
-            \text{daily return} = \beta_0 + \beta_1 (\text{reproduction_rate_vaccinations}_{t-1}) + 
-            \beta_2 (\Delta \text{vaccination_signal}_{t-180}) + \beta_3 (\text{Dummy_Variable}_{t-180}) + 
-            \beta_4 (\text{deaths_to_cases_ratio}) + \beta_5 (\text{new_cases_dummy_interaction}) +
-            \beta_6 (\text{new_deaths_dummy_interaction}) + \epsilon
+            \text{daily return} = \beta_0 + \beta_1 (\text{reproduction\_rate\_vaccinations}_{t-1}) + 
+            \beta_2 (\Delta \text{vaccination\_signal}_{t-180}) + 
+            \beta_3 (\text{Dummy\_Variable}_{t-180}) + 
+            \beta_4 (\text{deaths\_to\_cases\_ratio}) + 
+            \beta_5 (\text{new\_cases\_dummy\_interaction}) + 
+            \beta_6 (\text{new\_deaths\_dummy\_interaction}) + \epsilon
             """)
+
 
             # Create additional interaction terms
             filtered_data['new_cases_dummy_interaction'] = (
@@ -231,10 +311,14 @@ def main():
             # Second Linear Regression
             st.header("Second Linear Regression")
             st.latex(r"""
-            \text{new_deaths_smoothed} = \beta_0 + \beta_1 (\text{new_cases_smoothed}) + \beta_2 (\text{Dummy_Variable}) +
-            \beta_3 (\text{stringency_index}) + \beta_4 (\text{new_cases_dummy_interaction}) +
-            \beta_5 (\text{total_vaccination_rate}) + \beta_6 (\text{female_smokers_rate}) + \epsilon
+            \text{new\_deaths\_smoothed} = \beta_0 + \beta_1 (\text{new\_cases\_smoothed}) + 
+            \beta_2 (\text{Dummy\_Variable}) + 
+            \beta_3 (\text{stringency\_index}) + 
+            \beta_4 (\text{new\_cases\_dummy\_interaction}) + 
+            \beta_5 (\text{total\_vaccination\_rate}) + 
+            \beta_6 (\text{female\_smokers\_rate}) + \epsilon
             """)
+
 
             independent_vars = ['new_cases_smoothed', 'Dummy_Variable', 'stringency_index'] 
 
@@ -440,10 +524,14 @@ def main():
             # Perform extended logistic regression
 
             st.latex(r"""
-            P(\text{target} = 1) = \frac{1}{1 + e^{-(\beta_0 + \beta_1 \text{new_vaccinations_smoothed} + \beta_2 \text{new_deaths_smoothed} + 
-            \beta_3 \text{new_cases_smoothed} + \beta_4 \text{Dummy_Variable} + \beta_5 \text{deaths_to_cases_ratio} + 
-            \beta_6 \text{interaction_term})}}
+            P(\text{target} = 1) = \frac{1}{1 + e^{-(\beta_0 + \beta_1 \text{new\_vaccinations\_smoothed} + 
+            \beta_2 \text{new\_deaths\_smoothed} + 
+            \beta_3 \text{new\_cases\_smoothed} + 
+            \beta_4 \text{Dummy\_Variable} + 
+            \beta_5 \text{deaths\_to\_cases\_ratio} + 
+            \beta_6 \text{interaction\_term})}}
             """)
+
         
             extended_logistic_model, X_test, y_test = perform_extended_logistic_regression(merged_data, extended_independent_vars, target_var='target')
 
@@ -580,14 +668,17 @@ def main():
            
             st.write("Logistic Regression Equation with Differencing and Lagging")
 
+            logistic_model = perform_logistic_regression(merged_data, independent_vars)
+
             st.latex(r"""
-            P(\text{target} = 1) = \frac{1}{1 + e^{-(\beta_0 + \beta_1 \Delta \text{new_cases_smoothed}_{t-1} + 
-            \beta_2 \Delta \text{new_deaths_smoothed}_{t-1} + \beta_3 \Delta \text{new_vaccinations_smoothed}_{t-180} + 
-            \beta_4 \Delta \text{Dummy_Variable}_{t-180} + \beta_5 \text{deaths_to_cases_ratio} + 
-            \beta_6 \text{interaction_term})}}
+            P(\text{target} = 1) = \frac{1}{1 + e^{-(\beta_0 + \beta_1 \Delta \text{new\_cases\_smoothed}_{t-1} + 
+            \beta_2 \Delta \text{new\_deaths\_smoothed}_{t-1} + 
+            \beta_3 \Delta \text{new\_vaccinations\_smoothed}_{t-180} + 
+            \beta_4 \Delta \text{Dummy\_Variable}_{t-180} + 
+            \beta_5 \text{deaths\_to\_cases\_ratio} + 
+            \beta_6 \text{interaction\_term})}}
             """)
 
-            logistic_model = perform_logistic_regression(merged_data, independent_vars)
 
             # Display Logistic Regression Results
             st.subheader("Logistic Regression Results")
