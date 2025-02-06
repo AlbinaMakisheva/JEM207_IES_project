@@ -472,5 +472,19 @@ def analysis_tab(merged_data, events):
                  
         st.write("Despite the modifications (differencing & lagging), this model does not significantly outperform the standard logistic regression, with similar accuracy and ROC AUC values.")
 
+        st.header("Limitations of the project")
+        
+        st.write("""
+        
+            > Despite the poor predictive performance and low explanatory power of our regressions, our primary objective was to gain hands-on experience with Python and develop confidence in working with real-world datasets. While we applied various preprocessing techniques—such as handling heteroscedasticity, differencing, and lagging—to improve our model, the results suggest that significant noise and omitted variables likely influenced our findings.
+            
+            > One potential reason for the limited explanatory power of our models is the narrow focus on Pfizer's stock. Expanding the dataset to include other pharmaceutical companies could provide a broader and more comparative analysis, potentially leading to better model performance. However, incorporating multiple companies would have required extensive data collection and cleaning, significantly increasing the complexity and scope of the project. 
+            
+            > Additionally, stock prices are influenced by a wide range of macroeconomic, financial, and industry-specific factors, many of which were not included in our dataset.
+            
+            > Despite these limitations, it provided valuable insights into the challenges of working with financial data, reinforcing the importance of careful variable selection, proper model specification, and robust validation techniques.
+            
+                """)
+
     except KeyError as e:
         st.error(f"KeyError encountered: {e}")
