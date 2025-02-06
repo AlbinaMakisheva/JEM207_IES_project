@@ -1,13 +1,6 @@
 import numpy as np
 import pandas as pd
 import streamlit as st
-import matplotlib.pyplot as plt
-from sklearn.metrics import roc_curve, auc, accuracy_score, classification_report
-from sklearn.preprocessing import StandardScaler
-from sklearn.model_selection import train_test_split
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.linear_model import LogisticRegression
-from sklearn.impute import SimpleImputer
 
 # Filter data around key events
 def filter_data_around_events(data, events, window_months=1, date_column='date'):
@@ -28,6 +21,28 @@ def prepare_binary_target(df, price_column='close'):
     df['price_change'] = (df[price_column].diff() > 0).astype(int)
     df['target'] = (df[price_column].shift(-1) > df[price_column]).astype(int)
     return df
+
+
+def prepare_data_for_regressions(filtered_data):
+    """Prepares data for regression analysis."""
+    short_lags, long_lags = [1], [180]
+    filtered_data = process_data_for_regressions(filtered_data, short_lags, long_lags)
+
+    reg1_vars = (
+        [f"{var}_diff_lag_{lag}" for var in ['new_cases_smoothed', 'new_deaths_smoothed'] for lag in short_lags] +
+        [f"{var}_diff_lag_{lag}" for var in ['vaccination_signal', 'reproduction_rate', 'new_vaccinations_smoothed', 'Dummy_Variable'] for lag in long_lags] +
+        ['new_cases_dummy_interaction', 'new_deaths_dummy_interaction']
+    )
+    
+    reg2_vars = (
+        [f"reproduction_rate_vaccinations_diff_lag_{lag}" for lag in short_lags] +
+        [f"{var}_diff_lag_{lag}" for var in ['vaccination_signal', 'Dummy_Variable'] for lag in long_lags] +
+        ['deaths_to_cases_ratio', 'new_cases_dummy_interaction', 'new_deaths_dummy_interaction']
+    )
+
+    independent_vars = ['new_cases_smoothed', 'Dummy_Variable', 'stringency_index', 'new_cases_dummy_interaction', 'total_vaccination_rate', 'female_smokers_rate']
+
+    return filtered_data, {'reg1': reg1_vars, 'reg2': reg2_vars, 'independent': independent_vars}
 
 
 # Apply differencing and lags to the variables

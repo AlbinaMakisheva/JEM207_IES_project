@@ -21,7 +21,7 @@ def plot_covid_cases(data):
         color="new_cases_smoothed",
         hover_name="location",
         animation_frame=data['date'].dt.strftime('%Y-%m-%d'),
-        title="Global COVID-19 Cases Over Time",
+        title="Cases Over Time",
         color_continuous_scale=px.colors.sequential.Plasma
     )
     st.plotly_chart(fig)
@@ -122,84 +122,6 @@ def align_data(X, y):
     """Align X and y by their indices to ensure compatibility."""
     aligned_data = pd.concat([X, y], axis=1).dropna()
     return aligned_data[X.columns], aligned_data[y.name]
-            
-
-def plot_interactive_heatmap(data, date_column='date', time_unit='month'):
-    """
-    Creates an enhanced interactive heatmap with a time slider to explore relationships over time.
-    """
-    st.header("Interactive Heatmap: Stock Returns vs COVID-19 Metrics Over Time")
-    st.write("Explore how stock returns correlate with key COVID-19 metrics over different time periods.")
-
-    if not pd.api.types.is_datetime64_any_dtype(data[date_column]):
-        data[date_column] = pd.to_datetime(data[date_column])
-
-    # Aggregate by selected time unit
-    if time_unit == 'month':
-        data['time_unit'] = data[date_column].dt.to_period('M').astype(str)  # Convert Period to string
-    elif time_unit == 'quarter':
-        data['time_unit'] = data[date_column].dt.to_period('Q').astype(str)  # Convert Period to string
-    elif time_unit == 'year':
-        data['time_unit'] = data[date_column].dt.to_period('Y').astype(str)  # Convert Period to string
-    else:
-        st.error("Invalid time unit selected. Please choose 'month', 'quarter', or 'year'.")
-        return
-    
-    numeric_data = data.select_dtypes(include=['number'])
-
-    # Allow users to select variables
-    available_variables = numeric_data.columns.tolist()
-    selected_variables = st.multiselect(
-        "Select Variables for Heatmap",
-        available_variables,
-        default=['daily_return', 'new_cases', 'new_deaths', 'total_vaccinations', 'stringency_index']
-    )
-
-    if 'daily_return' not in selected_variables:
-        selected_variables.append('daily_return')  
-
-    correlation_data = []
-    
-    # Compute correlations for each time period
-    for time_period, group in numeric_data.groupby(data['time_unit']):
-        if len(group) < 2:
-            st.warning(f"Skipping time period {time_period}: Not enough data for correlation.")
-            continue
-        
-        group = group[selected_variables]
-        corr_matrix = group.corr()[['daily_return']].reset_index()  
-        corr_matrix['time_unit'] = time_period  
-        correlation_data.append(corr_matrix)
-
-    if not correlation_data:
-        st.error("No valid correlation data found. Ensure sufficient data for each time period.")
-        return
-    
-    heatmap_data = pd.concat(correlation_data, ignore_index=True)
-
-    heatmap_pivot = heatmap_data.pivot(index='time_unit', columns='index', values='daily_return')
-
-    # Sort variables by correlation strength
-    variable_order = heatmap_pivot.abs().mean(axis=0).sort_values(ascending=False).index
-    heatmap_pivot = heatmap_pivot[variable_order]
-
-    fig = px.imshow(
-        heatmap_pivot,
-        labels=dict(x="Variables", y="Time Period", color="Correlation"),
-        title="Enhanced Correlation of Stock Returns with COVID-19 Metrics Over Time",
-        aspect="auto",
-        color_continuous_scale="Cividis", 
-        zmin=-0.5,  
-        zmax=0.5
-    )
-
-    fig.update_layout(
-        xaxis=dict(tickangle=45),  
-        template="plotly_white",
-        font=dict(size=12)
-    )
-
-    st.plotly_chart(fig)
 
 
 def plot_residual_diagnostics(model, X, y, regression_name):
@@ -237,3 +159,50 @@ def plot_residual_diagnostics(model, X, y, regression_name):
     except Exception as e:
         st.error(f"Error during residual diagnostics for {regression_name}: {e}")
      
+
+def plot_interactive_time_series(data, date_column='date', default_vars=None):
+    if default_vars is None:
+        default_vars = ['new_cases_smoothed', 'new_deaths_smoothed', 'gdp_per_capita', 'stringency_index', 'new_vaccinations_smoothed']
+    
+    # Allow users to select variables to plot
+    st.write("Select variables to plot and explore trends interactively.")
+    
+    variables = st.multiselect(
+        "Select Variables to Plot",
+        data.columns.tolist(),
+        default=default_vars
+    )
+    
+    scale_type = st.radio("Select Scale Type:", ["Linear", "Logarithmic"], index=0)
+    
+    # Normalization option
+    normalize = st.checkbox("Normalize Data (Min-Max Scaling)", value=False)
+    
+    if variables:
+        # Normalize data
+        if normalize:
+            data[variables] = data[variables].apply(
+                lambda x: (x - x.min()) / (x.max() - x.min()) if x.max() != x.min() else x
+            )
+        
+        fig = px.line(
+            data,
+            x=date_column,
+            y=variables,
+            title="Interactive Time Series Exploration",
+            labels={date_column: "Date"},
+            markers=True
+        )
+        
+        if scale_type == "Logarithmic":
+            fig.update_layout(yaxis_type="log")
+        
+        fig.update_layout(
+            xaxis_title="Date",
+            yaxis_title="Values",
+            legend_title="Variables",
+            template="plotly_white"
+        )
+        st.plotly_chart(fig)
+    else:
+        st.write("Please select at least one variable to plot.")
