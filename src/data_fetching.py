@@ -15,6 +15,7 @@ def fetch_stock_data():
     except Exception as e:
         print(f"Error fetching stock data: {e}")
 
+
 def fetch_covid_data():
     url = "https://covid.ourworldindata.org/data/owid-covid-data.csv"
     file_path = 'data/raw/covid_data.csv'
