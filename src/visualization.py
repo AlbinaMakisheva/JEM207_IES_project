@@ -202,50 +202,6 @@ def plot_interactive_time_series(data, date_column='date', default_vars=None):
     else:
         st.write("Please select at least one variable to plot.")
         
-def plot_scatter_matrix(data, events):
-    """
-    Creates a scatter plot matrix with interactive filtering and better scaling. 
-        
-    """
-    st.header("Enhanced Scatter Matrix: Stock & COVID-19 Metrics")
-    st.write("""Explore how different variables relate to Pfizer's stock price. Each subplot compares two variables: If most points form a line, they have a strong correlation. If points are scattered randomly, the variables have little/no correlation.""")
-
-    # Default key variables
-    default_vars = ['daily_return', 'new_cases', 'total_vaccinations', 'stringency_index']
-    default_vars = [var for var in default_vars if var in data.columns]
-
-    variables = st.multiselect(
-        "Select Variables to Include in the Scatter Matrix",
-        data.select_dtypes(include=['number']).columns.tolist(),
-        default=default_vars
-    )
-
-    # Apply event-based filtering
-    event_filter = st.selectbox("Filter Data by Event", ["No Filter"] + list(events.keys()))
-    if event_filter != "No Filter":
-        event_date = pd.to_datetime(events[event_filter])
-        time_window = st.slider("Time Window Around Event (Days)", 7, 90, 30)
-        filtered_data = data[(data['date'] >= event_date - pd.Timedelta(days=time_window)) &
-                             (data['date'] <= event_date + pd.Timedelta(days=time_window))]
-    else:
-        filtered_data = data
-
-    scaler = MinMaxScaler()
-    scaled_data = pd.DataFrame(scaler.fit_transform(filtered_data[variables]), columns=variables)
-
-    if len(variables) >= 2:
-        fig = px.scatter_matrix(
-            scaled_data,
-            dimensions=variables,
-            color=filtered_data['daily_return'] if "daily_return" in filtered_data.columns else variables[0],
-            title="Enhanced Scatter Plot Matrix: Stock & COVID-19 Metrics",
-            labels={col: col.replace('_', ' ').title() for col in variables},
-            template="plotly_white",
-            color_continuous_scale="Viridis"  
-        )
-        st.plotly_chart(fig)
-    else:
-        st.warning("Please select at least two variables to plot.")
 
 
 def plot_interactive_heatmap(data, date_column='date', time_unit='month'):
