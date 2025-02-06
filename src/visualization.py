@@ -1,14 +1,12 @@
 import matplotlib.pyplot as plt
 import seaborn as sns
 import plotly.express as px
-from pathlib import Path
 import streamlit as st
 import matplotlib.dates as mdates
 import pandas as pd
 import plotly.express as px
-from sklearn.preprocessing import MinMaxScaler
-from sklearn.metrics import accuracy_score, classification_report, roc_curve, auc
-import pandas as pd
+from sklearn.metrics import classification_report
+from pathlib import Path
 
 
 # Plots smoothed COVID-19 cases globally over time
@@ -90,20 +88,6 @@ def visualize_covid_data(data, output_path='./visualizations/covid_trends.png'):
     st.pyplot(plt) 
 
 
-def plot_regression_results(coefficients, intercept, r2_score, feature_names, output_path='./visualizations/regression_results.png'):
-    if len(coefficients) != len(feature_names):
-        raise ValueError(f"Mismatch: {len(coefficients)} coefficients but {len(feature_names)} feature names provided.")
-    
-    plt.figure(figsize=(10, 6))
-    plt.bar(feature_names, coefficients, color='skyblue', edgecolor='black')
-    plt.axhline(0, color='red', linestyle='--', linewidth=1)
-    plt.title(f'Regression Coefficients (R² = {r2_score:.4f}, Intercept = {intercept:.4f})')
-    plt.ylabel('Coefficient Value')
-    plt.xlabel('Features')
-    plt.xticks(rotation=45, ha='right')
-    plt.tight_layout()
-    st.pyplot(plt) 
-
 def plot_roc_curve(fpr, tpr, roc_auc, title="ROC Curve"):
     fig, ax = plt.subplots()
     ax.plot(fpr, tpr, color='darkorange', lw=2, label=f'ROC curve (area = {roc_auc:.2f})')
@@ -115,14 +99,6 @@ def plot_roc_curve(fpr, tpr, roc_auc, title="ROC Curve"):
     ax.set_title(title)
     ax.legend(loc='lower right')
     st.pyplot(fig)
-
-def plot_feature_importance(feature_importance_df, title="Feature Importance"):
-    feature_importance_df.plot(kind='barh', x='Feature', y='Importance', legend=False)
-    plt.title(title)
-    plt.xlabel('Importance')
-    plt.ylabel('Feature')
-    plt.show()
-    st.pyplot(plt)
 
 
 def display_classification_report(y_true, y_pred, model_name="Model"):
@@ -147,62 +123,6 @@ def align_data(X, y):
     aligned_data = pd.concat([X, y], axis=1).dropna()
     return aligned_data[X.columns], aligned_data[y.name]
             
-
-    
-    
-    
-    
-#Interactive Time Series 
-
-def plot_interactive_time_series(data, date_column='date', default_vars=None):
-    if default_vars is None:
-        default_vars = ['new_cases_smoothed', 'new_deaths_smoothed', 'gdp_per_capita', 'stringency_index', 'new_vaccinations_smoothed']
-    
-    # Allow users to select variables to plot
-    st.header("Interactive Time Series Exploration")
-    st.write("Select variables to plot and explore trends interactively.")
-    
-    variables = st.multiselect(
-        "Select Variables to Plot",
-        data.columns.tolist(),
-        default=default_vars
-    )
-    
-    scale_type = st.radio("Select Scale Type:", ["Linear", "Logarithmic"], index=0)
-    
-    # Normalization option
-    normalize = st.checkbox("Normalize Data (Min-Max Scaling)", value=False)
-    
-    if variables:
-        # Normalize data
-        if normalize:
-            data[variables] = data[variables].apply(
-                lambda x: (x - x.min()) / (x.max() - x.min()) if x.max() != x.min() else x
-            )
-        
-        fig = px.line(
-            data,
-            x=date_column,
-            y=variables,
-            title="Interactive Time Series Exploration",
-            labels={date_column: "Date"},
-            markers=True
-        )
-        
-        if scale_type == "Logarithmic":
-            fig.update_layout(yaxis_type="log")
-        
-        fig.update_layout(
-            xaxis_title="Date",
-            yaxis_title="Values",
-            legend_title="Variables",
-            template="plotly_white"
-        )
-        st.plotly_chart(fig)
-    else:
-        st.write("Please select at least one variable to plot.")
-        
-
 
 def plot_interactive_heatmap(data, date_column='date', time_unit='month'):
     """
@@ -280,7 +200,8 @@ def plot_interactive_heatmap(data, date_column='date', time_unit='month'):
     )
 
     st.plotly_chart(fig)
-    
+
+
 def plot_residual_diagnostics(model, X, y, regression_name):
     try:
         # Ensure features match those used during fit

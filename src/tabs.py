@@ -1,15 +1,10 @@
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
-from sklearn.metrics import roc_curve, auc, accuracy_score, classification_report
-from sklearn.preprocessing import StandardScaler
-from sklearn.model_selection import train_test_split
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.linear_model import LogisticRegression
-from sklearn.impute import SimpleImputer
 import streamlit as st
-from src.analysis import perform_extended_logistic_regression, perform_and_display_regression, plot_residual_diagnostics_for_model, process_data_for_regressions, run_regression_analysis, filter_data_around_events, test_and_correct_heteroscedasticity, plot_lag_correlations, prepare_binary_target, perform_logistic_regression, perform_random_forest, categorize_by_autocorrelation, calculate_feature_importance, apply_differencing, check_stationarity, reduce_multicollinearity, perform_multiple_linear_regression, add_lagged_features, perform_regression_and_plot, display_autocorrelation_categories, calculate_and_display_feature_importance, apply_differencing_and_display, display_stationarity_results, display_vif_results
-from src.visualization import plot_coefficients, plot_residual_diagnostics, plot_covid_cases, plot_stock_with_events, visualize_covid_data, plot_regression_results, plot_roc_curve, display_classification_report, plot_feature_importance, plot_interactive_time_series, plot_interactive_heatmap
+from sklearn.metrics import roc_curve, classification_report
+from src.process_data import filter_data_around_events, prepare_binary_target, process_data_for_regressions, apply_differencing, categorize_by_autocorrelation
+from src.analysis import perform_extended_logistic_regression, perform_and_display_regression, plot_residual_diagnostics_for_model, run_regression_analysis, plot_lag_correlations, calculate_feature_importance, check_stationarity, reduce_multicollinearity
+from src.visualization import plot_residual_diagnostics, plot_stock_with_events, visualize_covid_data, plot_roc_curve, display_classification_report, plot_interactive_heatmap
 from src.texts import limitations_text, ext_logReg_coef_text, ext_logRed_text, logReg_coef_text, logReg_text, heteroscedasticity_text, residual_text, coefficients_text_secondLR, coefficients_text_firstLR, autocorrelation_text, filtering_text, covid_cases_analysis_text, covid_cases_analysis_text, stock_price_analysis_text, introduction_text
 
 def introduction_tab(merged_data, events, covid_data):
