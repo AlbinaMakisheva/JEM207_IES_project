@@ -53,11 +53,11 @@ def filtering_text():
 
 def autocorrelation_text():
     return """
-            With this analysis, we aim to investigate the autocorrelation between variables in order to help us building models that predict new trends. 
-            It is worth noticing that most variables namely total_cases, new_cases, new_cases_smoothed, total_deaths and new_deaths present high autocorrelation values. This indicate that many of our variables are highly dependent on their previous values at lag 1.
-            However, one could also argue that this is a common feature of cumulative variables (which give the cumulative sums over time) and smoothed variables (which are designed to reduce short-term fluctuations).
-            Nevertheless, we will focus on variables with much lower correlation, since they are the ones which might add much new information to our regressions.
-     """
+        With this analysis, we aim to investigate the autocorrelation between variables in order to help us building models that predict new trends. 
+        It is worth noticing that most variables namely total_cases, new_cases, new_cases_smoothed, total_deaths and new_deaths present high autocorrelation values. This indicate that many of our variables are highly dependent on their previous values at lag 1.
+        However, one could also argue that this is a common feature of cumulative variables (which give the cumulative sums over time) and smoothed variables (which are designed to reduce short-term fluctuations).
+        Nevertheless, we will focus on variables with much lower correlation, since they are the ones which might add much new information to our regressions.
+    """
 
 def coefficients_text_firstLR():
     return """   
